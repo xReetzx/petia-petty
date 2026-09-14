@@ -24,12 +24,17 @@ and every model is built from primitives. Open `index.html` and it runs.
 
 ## How it works
 
-You run. Things get in the way. Every time you hit something the clippers
+You run down a city street. Traffic is stopped dead across all three lanes and
+you have to get through it. Every time you hit something the clippers
 gain ground — they don't kill you directly, they just get closer, and the buzz
 gets louder and higher as they do. When the chase meter fills they lunge and
 take a stage of hair off the top.
 
 Three stages of hair, then you're bald and it's over.
+
+Three kinds of stalled traffic, one per way past it: a low **car** you vault,
+a container up on a flatbed **rig** you slide under, and a **box van** that
+leaves you no option but to change lanes.
 
 - **Hair tufts** — score, and build a combo every five you collect
 - **Regrowth serum** — rare; gives a hair stage back
@@ -47,10 +52,10 @@ at whatever the current speed is.
 index.html        page shell, HUD, overlay screens, styles
 src/config.js     every tunable number — speeds, spawn tables, palette
 src/utils.js      RNG, pooling, toon materials, inked-outline helper
-src/face.js       the character's face, drawn with the canvas 2D API
+src/face.js       the character's face and beard, drawn with the canvas 2D API
 src/player.js     body, procedural run/jump/slide animation, hair stages
 src/clippers.js   the chaser, and the menace value that drives the tension
-src/world.js      streamed track chunks, obstacle patterns, pickups, scenery
+src/world.js      streamed road chunks, traffic patterns, pickups, city scenery
 src/ui.js         HUD and screens
 src/game.js       state machine, input, collision, camera, main loop
 vendor/           Three.js r128 (MIT), vendored so this runs offline
@@ -68,6 +73,13 @@ clippers behind the camera where they were invisible for the entire run.
 and the player is the whole runway you get to read an obstacle in, so the
 camera backs off as the pace climbs and that runway stays worth about the same
 number of seconds at any speed.
+
+**The face is drawn, not modelled.** The camera looks him in the face for the
+whole run, so his likeness lives in a 512×512 canvas texture on the front of
+the head — brows, nose, beard, and the alopecia patches through the beard. The
+patches are punched through a separate beard layer with `destination-out` so
+the skin painted underneath shows through, rather than being repainted on top,
+which is what made an earlier version's spots look like stickers.
 
 **Outlines are inverted-hull, not post-processing.** Each mesh gets a
 back-faced copy scaled slightly outward. It costs one extra draw call per

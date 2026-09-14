@@ -10,7 +10,12 @@ window.PP = window.PP || {};
 PP.World = (function () {
   'use strict';
 
-  const OB = { HURDLE: 'hurdle', BAR: 'bar', BLOCK: 'block' };
+  // Three kinds of stalled traffic, one per way of getting past it.
+  const OB = {
+    CAR: 'car',   // low enough to vault
+    RIG: 'rig',   // container up on a flatbed — slide under it
+    VAN: 'van'    // solid wall of van — change lanes
+  };
 
   function World(scene, seed) {
     this.scene = scene;
@@ -29,9 +34,6 @@ PP.World = (function () {
   World.prototype._materials = function () {
     const c = PP.CFG.COL, U = PP.U;
     this.mat = {
-      hurdle: U.toonMat(c.shirtDk),
-      bar: U.toonMat(c.chromeDk),
-      block: U.toonMat(c.pole),
       tuft: U.toonMat(c.hair),
       serum: U.toonMat(c.serum),
       pomade: U.toonMat(c.pomade)
@@ -46,7 +48,7 @@ PP.World = (function () {
     const tex = this._floorTexture();
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(9.2, 600),
-      new THREE.MeshToonMaterial({ map: tex, gradientMap: U.toonGradient() })
+      new THREE.MeshBasicMaterial({ map: tex })
     );
     floor.rotation.x = -Math.PI / 2;
     this.scene.add(floor);
@@ -56,11 +58,13 @@ PP.World = (function () {
     // poles and shopfronts hang in empty space either side of the road.
     [-1, 1].forEach((s) => {
       const walk = new THREE.Mesh(
-        new THREE.PlaneGeometry(13, 600),
-        U.toonMat(c.floorAlt)
+        new THREE.PlaneGeometry(24, 600),
+        new THREE.MeshToonMaterial({
+          color: c.walk, map: this._walkTexture(), gradientMap: U.toonGradient()
+        })
       );
       walk.rotation.x = -Math.PI / 2;
-      walk.position.set(s * 11.4, 0.42, 0);
+      walk.position.set(s * 16.6, 0.42, 0);
       this.scene.add(walk);
     });
 
@@ -71,7 +75,7 @@ PP.World = (function () {
     [-1, 1].forEach((s) => {
       const kerb = new THREE.Mesh(
         new THREE.BoxGeometry(0.55, 0.46, 600),
-        U.toonMat(c.floorAlt)
+        U.toonMat(c.kerbCol)
       );
       kerb.position.set(s * 4.7, 0.23, 0);
       this.scene.add(kerb);
@@ -87,128 +91,215 @@ PP.World = (function () {
     });
   };
 
+  /* Paving slabs for the sidewalk. */
+  World.prototype._walkTexture = function () {
+    if (this._walkTex) return this._walkTex;
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 128;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, 128, 128);
+    ctx.strokeStyle = 'rgba(20,16,19,0.34)';
+    ctx.lineWidth = 3;
+    for (let i = 0; i <= 2; i++) {
+      ctx.beginPath(); ctx.moveTo(0, i * 64); ctx.lineTo(128, i * 64); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(i * 64, 0); ctx.lineTo(i * 64, 128); ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(0,0,0,0.06)';
+    for (let i = 0; i < 260; i++) {
+      ctx.fillRect(Math.random() * 128, Math.random() * 128, 2, 2);
+    }
+    const t = new THREE.CanvasTexture(cv);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(5, 130);
+    this._walkTex = t;
+    return t;
+  };
+
   World.prototype._floorTexture = function () {
     const c = PP.CFG.COL;
     const cv = document.createElement('canvas');
-    cv.width = 256; cv.height = 256;
+    cv.width = 256; cv.height = 512;
     const ctx = cv.getContext('2d');
     const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 
-    ctx.fillStyle = hex(c.floor);
-    ctx.fillRect(0, 0, 256, 256);
-
-    // Barbershop checker, drawn slightly wonky so it reads as hand-inked
-    ctx.fillStyle = hex(c.floorAlt);
-    for (let y = 0; y < 4; y++) {
-      for (let x = 0; x < 4; x++) {
-        if ((x + y) % 2) continue;
-        ctx.save();
-        ctx.translate(x * 64 + 32, y * 64 + 32);
-        ctx.rotate((Math.random() - 0.5) * 0.03);
-        ctx.fillRect(-32, -32, 64, 64);
-        ctx.restore();
-      }
+    // Asphalt, roughed up so it isn't a flat slab of grey
+    ctx.fillStyle = hex(c.road);
+    ctx.fillRect(0, 0, 256, 512);
+    ctx.fillStyle = hex(c.roadDark);
+    for (let i = 0; i < 900; i++) {
+      const x = Math.random() * 256, y = Math.random() * 512;
+      ctx.globalAlpha = 0.1 + Math.random() * 0.25;
+      ctx.fillRect(x, y, 1 + Math.random() * 3, 1 + Math.random() * 3);
     }
-    // Ink border on the tiles
-    ctx.strokeStyle = 'rgba(20,16,19,0.78)';
-    ctx.lineWidth = 3.2;
-    for (let i = 0; i <= 4; i++) {
-      PP.U.inkLine(ctx, 0, i * 64, 256, i * 64, 2.5, 1.2);
-      PP.U.inkLine(ctx, i * 64, 0, i * 64, 256, 2.5, 1.2);
-    }
-    // Yellow marker scribble accents
-    ctx.globalAlpha = 0.5;
-    PP.U.hatch(ctx, 20, 150, 70, 50, 6, 1.0, 0.7, hex(c.marker));
-    PP.U.hatch(ctx, 0, 0, 256, 256, 22, Math.PI / 3, 0.09, '#141013');
     ctx.globalAlpha = 1;
+    PP.U.hatch(ctx, 0, 0, 256, 512, 17, Math.PI / 3, 0.07, '#000');
+
+    // The texture spans the full road width, so lane dividers land at the
+    // boundaries between the three lanes and the solid lines mark the edges.
+    const dash = (x, color, w) => {
+      ctx.fillStyle = color;
+      for (let y = 0; y < 512; y += 96) ctx.fillRect(x - w / 2, y, w, 54);
+    };
+    dash(96, hex(c.lineMid), 7);
+    dash(160, hex(c.lineMid), 7);
+
+    ctx.fillStyle = hex(c.lineMark);
+    ctx.fillRect(10, 0, 6, 512);
+    ctx.fillRect(240, 0, 6, 512);
+
+    // Worn paint: knock holes in the markings so they read as hand-inked
+    ctx.globalCompositeOperation = 'destination-out';
+    for (let i = 0; i < 130; i++) {
+      ctx.globalAlpha = 0.25 + Math.random() * 0.5;
+      ctx.fillRect(Math.random() * 256, Math.random() * 512, 2 + Math.random() * 5, 2 + Math.random() * 7);
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
 
     const tex = new THREE.CanvasTexture(cv);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(2, 130);
+    tex.repeat.set(1, 40);
     return tex;
   };
 
   World.prototype._pools = function () {
-    const U = PP.U, c = PP.CFG.COL, self = this;
+    const U = PP.U, c = PP.CFG.COL;
 
-    const mkHurdle = () => {
-      const g = new THREE.Group();
-      const seat = U.inked(new THREE.BoxGeometry(1.7, 0.55, 0.9), c.shirtDk, 0.05);
-      seat.position.y = 0.62;
-      g.add(seat);
-      const post = U.inked(new THREE.CylinderGeometry(0.16, 0.22, 0.62, 8), c.chromeDk, 0.04);
-      post.position.y = 0.3;
-      g.add(post);
-      g.userData = { kind: OB.HURDLE, yMin: 0, yMax: 0.95, halfW: 0.9 };
-      return g;
+    const pickCar = () => c.cars[(Math.random() * c.cars.length) | 0];
+
+    // Four wheels on a chassis of the given footprint.
+    const wheels = (g, halfW, halfL, r) => {
+      [-1, 1].forEach((sx) => [-1, 1].forEach((sz) => {
+        const w = U.inked(new THREE.CylinderGeometry(r, r, 0.17, 9), c.tyre, 0.035);
+        w.rotation.z = Math.PI / 2;
+        w.position.set(sx * halfW, r, sz * halfL);
+        g.add(w);
+      }));
     };
 
-    const mkBar = () => {
+    /* --- Low car: vault the bonnet ------------------------------------- */
+    const mkCar = () => {
       const g = new THREE.Group();
-      const shelf = U.inked(new THREE.BoxGeometry(1.9, 0.26, 0.6), c.chromeDk, 0.05);
-      shelf.position.y = 1.72;
-      g.add(shelf);
-      // Bottles hanging under it, so it reads as something to duck
-      for (let i = -1; i <= 1; i++) {
-        const b = U.inked(new THREE.CylinderGeometry(0.13, 0.13, 0.42, 7), i === 0 ? c.serum : c.pomade, 0.03);
-        b.position.set(i * 0.55, 1.42, 0);
-        g.add(b);
-      }
-      const rope = U.inked(new THREE.CylinderGeometry(0.04, 0.04, 1.3, 5), c.ink, 0.015);
-      rope.position.y = 2.5;
-      g.add(rope);
-      g.userData = { kind: OB.BAR, yMin: 1.2, yMax: 3.0, halfW: 1.0 };
-      return g;
-    };
+      const paint = pickCar();
 
-    const mkBlock = () => {
-      const g = new THREE.Group();
-      // Barber pole: red/blue/white bands
-      const bands = [c.pole, 0xf4efe4, c.poleB, 0xf4efe4, c.pole, 0xf4efe4];
-      bands.forEach((col, i) => {
-        const b = U.inked(new THREE.CylinderGeometry(0.34, 0.34, 0.34, 10), col, 0.035);
-        b.position.y = 0.2 + i * 0.34;
-        g.add(b);
+      const body = U.inked(new THREE.BoxGeometry(1.5, 0.46, 3.3), paint, 0.055);
+      body.position.y = 0.52;
+      g.add(body);
+
+      // Cabin set back and narrowed, so the silhouette reads as a car
+      const cabin = U.inked(new THREE.BoxGeometry(1.32, 0.42, 1.55), paint, 0.05);
+      cabin.position.set(0, 0.94, 0.12);
+      g.add(cabin);
+      const glass = U.inked(new THREE.BoxGeometry(1.36, 0.3, 1.2), c.glass, 0.04);
+      glass.position.set(0, 0.96, 0.12);
+      g.add(glass);
+
+      wheels(g, 0.74, 1.12, 0.3);
+
+      // Lights: white at the front (facing the oncoming player), red behind
+      [-1, 1].forEach((sx) => {
+        const hl = U.inked(new THREE.BoxGeometry(0.3, 0.16, 0.1), 0xfff3cf, 0.03);
+        hl.position.set(sx * 0.52, 0.56, -1.68);
+        g.add(hl);
+        const tl = U.inked(new THREE.BoxGeometry(0.3, 0.16, 0.1), 0xd94a4a, 0.03);
+        tl.position.set(sx * 0.52, 0.6, 1.68);
+        g.add(tl);
       });
-      const cap = U.inked(new THREE.SphereGeometry(0.34, 10, 8), c.chrome, 0.04);
-      cap.position.y = 2.28;
-      g.add(cap);
-      g.userData = { kind: OB.BLOCK, yMin: 0, yMax: 2.6, halfW: 0.5 };
+
+      g.userData = { kind: OB.CAR, yMin: 0, yMax: 1.18, halfW: 0.88 };
+      return g;
+    };
+
+    /* --- Flatbed rig: container up on stilts, slide underneath --------- */
+    const mkRig = () => {
+      const g = new THREE.Group();
+
+      // Deck held high so there's a clear gap at road level
+      const deck = U.inked(new THREE.BoxGeometry(2.0, 0.22, 4.6), c.rigDeck, 0.055);
+      deck.position.y = 1.42;
+      g.add(deck);
+
+      const box = U.inked(new THREE.BoxGeometry(1.9, 1.5, 4.2), c.rigBody, 0.07);
+      box.position.y = 2.28;
+      g.add(box);
+      // Corrugation so it isn't a blank slab
+      for (let i = 0; i < 6; i++) {
+        const rib = U.inked(new THREE.BoxGeometry(1.94, 1.4, 0.1), c.rigDeck, 0.03);
+        rib.position.set(0, 2.28, -1.75 + i * 0.7);
+        g.add(rib);
+      }
+
+      // Stilts at the corners, kept narrow and outboard of the lane centre
+      [-1, 1].forEach((sx) => [-1, 1].forEach((sz) => {
+        const leg = U.inked(new THREE.BoxGeometry(0.2, 1.3, 0.24), c.rigDeck, 0.04);
+        leg.position.set(sx * 0.85, 0.66, sz * 1.95);
+        g.add(leg);
+      }));
+
+      g.userData = { kind: OB.RIG, yMin: 1.15, yMax: 3.3, halfW: 1.0 };
+      return g;
+    };
+
+    /* --- Box van: solid, change lanes ---------------------------------- */
+    const mkVan = () => {
+      const g = new THREE.Group();
+      const paint = pickCar();
+
+      const cab = U.inked(new THREE.BoxGeometry(1.55, 1.25, 1.35), paint, 0.06);
+      cab.position.set(0, 1.0, -1.35);
+      g.add(cab);
+      const wind = U.inked(new THREE.BoxGeometry(1.4, 0.55, 0.12), c.glass, 0.04);
+      wind.position.set(0, 1.3, -2.0);
+      g.add(wind);
+
+      const box = U.inked(new THREE.BoxGeometry(1.7, 1.95, 2.9), c.rigBody, 0.07);
+      box.position.set(0, 1.42, 0.55);
+      g.add(box);
+      // Livery band in the cab's colour, so the van reads against a pale sky
+      const stripe = U.inked(new THREE.BoxGeometry(1.74, 0.66, 2.9), paint, 0.04);
+      stripe.position.set(0, 0.86, 0.55);
+      g.add(stripe);
+      const roof = U.inked(new THREE.BoxGeometry(1.74, 0.18, 2.9), paint, 0.04);
+      roof.position.set(0, 2.4, 0.55);
+      g.add(roof);
+
+      wheels(g, 0.8, 1.3, 0.34);
+
+      g.userData = { kind: OB.VAN, yMin: 0, yMax: 2.6, halfW: 0.95 };
       return g;
     };
 
     this.obPools = {
-      [OB.HURDLE]: new U.Pool(mkHurdle),
-      [OB.BAR]: new U.Pool(mkBar),
-      [OB.BLOCK]: new U.Pool(mkBlock)
+      [OB.CAR]: new U.Pool(mkCar),
+      [OB.RIG]: new U.Pool(mkRig),
+      [OB.VAN]: new U.Pool(mkVan)
     };
 
+    /* --- Pickups -------------------------------------------------------- */
     const mkTuft = () => {
       const g = new THREE.Group();
-      // A little clump of hair — three cones fanned out
       for (let i = 0; i < 3; i++) {
-        const s = U.inked(new THREE.ConeGeometry(0.11, 0.34, 5), c.hair, 0.025);
-        s.position.set((i - 1) * 0.1, 0, 0);
-        s.rotation.z = (i - 1) * 0.45;
-        g.add(s);
+        const sp = U.inked(new THREE.ConeGeometry(0.11, 0.34, 5), c.hair, 0.025);
+        sp.position.set((i - 1) * 0.1, 0, 0);
+        sp.rotation.z = (i - 1) * 0.45;
+        g.add(sp);
       }
       g.userData = { kind: 'tuft' };
       return g;
     };
     const mkSerum = () => {
       const g = new THREE.Group();
-      const b = U.inked(new THREE.CylinderGeometry(0.2, 0.24, 0.5, 9), c.serum, 0.035);
-      g.add(b);
-      const cap2 = U.inked(new THREE.CylinderGeometry(0.1, 0.1, 0.18, 8), c.chrome, 0.025);
-      cap2.position.y = 0.33;
-      g.add(cap2);
+      g.add(U.inked(new THREE.CylinderGeometry(0.2, 0.24, 0.5, 9), c.serum, 0.035));
+      const cap = U.inked(new THREE.CylinderGeometry(0.1, 0.1, 0.18, 8), c.chrome, 0.025);
+      cap.position.y = 0.33;
+      g.add(cap);
       g.userData = { kind: 'serum' };
       return g;
     };
     const mkPomade = () => {
       const g = new THREE.Group();
-      const j = U.inked(new THREE.CylinderGeometry(0.28, 0.28, 0.3, 12), c.pomade, 0.035);
-      g.add(j);
+      g.add(U.inked(new THREE.CylinderGeometry(0.28, 0.28, 0.3, 12), c.pomade, 0.035));
       const lid = U.inked(new THREE.CylinderGeometry(0.29, 0.29, 0.1, 12), c.chrome, 0.025);
       lid.position.y = 0.2;
       g.add(lid);
@@ -222,46 +313,113 @@ PP.World = (function () {
       pomade: new U.Pool(mkPomade)
     };
 
-    // Roadside scenery: barber poles and shopfront awnings. Purely decorative,
-    // but it's what makes the track read as a street rather than a white void.
+    /* --- Roadside city -------------------------------------------------- */
+    this.facades = [0, 1, 2, 3].map((i) => this._facadeTexture(i));
+
     this.sceneryPool = new U.Pool(() => {
       const g = new THREE.Group();
-      const which = Math.random();
+      const roll = Math.random();
 
-      if (which < 0.55) {
-        // Barber pole on a bracket
-        const post = U.inked(new THREE.CylinderGeometry(0.09, 0.09, 3.0, 7), c.chromeDk, 0.05);
-        post.position.y = 1.5;
-        g.add(post);
-        const bands = [c.pole, 0xf4efe4, c.poleB, 0xf4efe4, c.pole, 0xf4efe4, c.poleB];
-        bands.forEach((col, i) => {
-          const b = U.inked(new THREE.CylinderGeometry(0.22, 0.22, 0.22, 9), col, 0.04);
-          b.position.set(0, 1.9 + i * 0.22, 0.3);
-          g.add(b);
+      if (roll < 0.62) {
+        // Building. Height varies a lot so the skyline has a rhythm.
+        const h = 6 + Math.random() * 15;
+        const w = 5.5 + Math.random() * 6;
+        const d = 6 + Math.random() * 8;
+        const tex = this.facades[(Math.random() * this.facades.length) | 0];
+        const mat = new THREE.MeshToonMaterial({
+          color: c.bldg[(Math.random() * c.bldg.length) | 0],
+          map: tex,
+          gradientMap: U.toonGradient()
         });
-        const capTop = U.inked(new THREE.SphereGeometry(0.22, 9, 7), c.chrome, 0.045);
-        capTop.position.set(0, 3.45, 0.3);
-        g.add(capTop);
+        const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+        U.outline(b, 0.12);
+        b.position.y = h / 2;
+        g.add(b);
+
+        // Ground-floor shopfront, so the street level isn't a blank wall
+        const shop = U.inked(new THREE.BoxGeometry(w * 0.99, 2.4, d * 0.99), 0x3a3f48, 0.08);
+        shop.position.y = 1.2;
+        g.add(shop);
+        // A narrow awning over the entrance only, not a band round the block
+        const awn = U.inked(new THREE.BoxGeometry(w * 0.42, 0.2, 0.9), c.pole, 0.05);
+        awn.position.set(0, 2.5, -d / 2 - 0.3);
+        g.add(awn);
+      } else if (roll < 0.84) {
+        // Street lamp with an arm reaching over the road
+        const post = U.inked(new THREE.CylinderGeometry(0.11, 0.15, 6.4, 8), c.lamp, 0.05);
+        post.position.y = 3.2;
+        g.add(post);
+        const arm = U.inked(new THREE.BoxGeometry(2.3, 0.14, 0.14), c.lamp, 0.04);
+        arm.position.set(-1.1, 6.3, 0);
+        g.add(arm);
+        const hood = U.inked(new THREE.BoxGeometry(0.75, 0.2, 0.42), c.lamp, 0.04);
+        hood.position.set(-2.1, 6.2, 0);
+        g.add(hood);
+        const bulb = new THREE.Mesh(
+          new THREE.BoxGeometry(0.6, 0.08, 0.34),
+          new THREE.MeshBasicMaterial({ color: 0xffeeae })
+        );
+        bulb.position.set(-2.1, 6.06, 0);
+        g.add(bulb);
       } else {
-        // Shopfront: awning over a dark window
-        const wall = U.inked(new THREE.BoxGeometry(0.4, 3.0, 3.4), c.wall, 0.07);
-        wall.position.y = 1.5;
-        g.add(wall);
-        const win = U.inked(new THREE.BoxGeometry(0.16, 1.3, 2.3), 0x3a3f48, 0.05);
-        win.position.set(-0.24, 1.55, 0);
-        g.add(win);
-        const awning = U.inked(new THREE.BoxGeometry(0.9, 0.22, 3.2), c.pole, 0.06);
-        awning.position.set(-0.55, 2.45, 0);
-        awning.rotation.z = 0.2;
-        g.add(awning);
-        const stripe = U.inked(new THREE.BoxGeometry(0.92, 0.1, 1.1), c.marker, 0.04);
-        stripe.position.set(-0.57, 2.52, 0);
-        stripe.rotation.z = 0.2;
-        g.add(stripe);
+        // Traffic light
+        const post = U.inked(new THREE.CylinderGeometry(0.1, 0.13, 4.6, 8), c.lamp, 0.05);
+        post.position.y = 2.3;
+        g.add(post);
+        const housing = U.inked(new THREE.BoxGeometry(0.46, 1.25, 0.4), 0x2f3540, 0.05);
+        housing.position.set(-0.35, 4.6, 0);
+        g.add(housing);
+        [[0.38, 0xd94a4a], [0, 0xe0b21f], [-0.38, 0x57a86b]].forEach(([dy, col]) => {
+          const lens = new THREE.Mesh(
+            new THREE.SphereGeometry(0.13, 8, 6),
+            new THREE.MeshBasicMaterial({ color: col })
+          );
+          lens.position.set(-0.35, 4.6 + dy, -0.22);
+          g.add(lens);
+        });
       }
       return g;
     });
     this.scenery = [];
+  };
+
+  /* A building facade: rows of windows, drawn once and reused. */
+  World.prototype._facadeTexture = function (variant) {
+    const cv = document.createElement('canvas');
+    cv.width = 128; cv.height = 256;
+    const ctx = cv.getContext('2d');
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, 128, 256);
+
+    const cols = 3 + (variant % 3);
+    const rows = 8 + variant * 2;
+    const mw = 128 / cols, mh = 256 / rows;
+    const ww = mw * 0.52, wh = mh * 0.52;
+
+    for (let r = 0; r < rows; r++) {
+      for (let cI = 0; cI < cols; cI++) {
+        const x = cI * mw + (mw - ww) / 2;
+        const y = r * mh + (mh - wh) / 2;
+        // A few windows lit, the rest dark glass
+        const lit = Math.random() < 0.22;
+        ctx.fillStyle = lit ? '#ffe9b0' : '#6b7480';
+        ctx.fillRect(x, y, ww, wh);
+        ctx.strokeStyle = 'rgba(20,16,19,0.85)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, ww, wh);
+      }
+    }
+    // Floor lines
+    ctx.strokeStyle = 'rgba(20,16,19,0.28)';
+    ctx.lineWidth = 1.5;
+    for (let r = 1; r < rows; r++) {
+      ctx.beginPath(); ctx.moveTo(0, r * mh); ctx.lineTo(128, r * mh); ctx.stroke();
+    }
+
+    const tex = new THREE.CanvasTexture(cv);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    return tex;
   };
 
   /* ---- Patterns --------------------------------------------------------
@@ -270,22 +428,22 @@ PP.World = (function () {
    * what guarantees at least one lane is always survivable.
    */
   const PATTERNS = [
-    { w: 26, blocked: 1, build: (l) => [{ lane: l, kind: OB.HURDLE }] },
-    { w: 22, blocked: 1, build: (l) => [{ lane: l, kind: OB.BAR }] },
-    { w: 20, blocked: 1, build: (l) => [{ lane: l, kind: OB.BLOCK }] },
+    { w: 26, blocked: 1, build: (l) => [{ lane: l, kind: OB.CAR }] },
+    { w: 22, blocked: 1, build: (l) => [{ lane: l, kind: OB.RIG }] },
+    { w: 20, blocked: 1, build: (l) => [{ lane: l, kind: OB.VAN }] },
     // Two lanes blocked, one gap — only unlocked at higher tiers
     { w: 14, blocked: 2, build: (l) => {
         const others = [0, 1, 2].filter((x) => x !== l);
-        return others.map((o) => ({ lane: o, kind: OB.BLOCK }));
+        return others.map((o) => ({ lane: o, kind: OB.VAN }));
       } },
     { w: 12, blocked: 2, build: (l) => {
         const others = [0, 1, 2].filter((x) => x !== l);
-        return others.map((o) => ({ lane: o, kind: OB.HURDLE }));
+        return others.map((o) => ({ lane: o, kind: OB.CAR }));
       } },
-    // Full-width low bar: must slide, any lane works
-    { w: 10, blocked: 3, build: () => [0, 1, 2].map((o) => ({ lane: o, kind: OB.BAR })) },
-    // Full-width hurdle row: must jump
-    { w: 8, blocked: 3, build: () => [0, 1, 2].map((o) => ({ lane: o, kind: OB.HURDLE })) }
+    // Traffic jammed clean across the road, up on flatbeds: slide under it
+    { w: 10, blocked: 3, build: () => [0, 1, 2].map((o) => ({ lane: o, kind: OB.RIG })) },
+    // Bumper-to-bumper low cars: vault the lot
+    { w: 8, blocked: 3, build: () => [0, 1, 2].map((o) => ({ lane: o, kind: OB.CAR })) }
   ];
 
   World.prototype.tier = function (metres) {
@@ -431,7 +589,7 @@ PP.World = (function () {
     }
 
     // Scroll the floor texture instead of moving the floor mesh
-    this.floor.material.map.offset.y -= dz * 0.0154;
+    this.floor.material.map.offset.y -= dz * (40 / 600);
 
     this.nextZ += dz;
     while (this.nextZ > -cfg.CHUNK_LEN * cfg.SPAWN_AHEAD) {

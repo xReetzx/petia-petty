@@ -64,8 +64,8 @@ PP.CFG = {
     { at: 1200, density: 0.82, maxBlocked: 2 },
     { at: 2500, density: 0.92, maxBlocked: 2 }
   ],
-  SCENERY_X_MIN: 9.5,            // roadside props start this far out...
-  SCENERY_X_RANGE: 3.5,          // ...spread over this much more
+  SCENERY_X_MIN: 13.0,           // roadside props start this far out...
+  SCENERY_X_RANGE: 8.0,          // ...spread over this much more
   MIN_REACTION: 0.55,            // seconds of clear runway guaranteed before any obstacle
 
   // ---- Camera -------------------------------------------------------------
@@ -92,7 +92,7 @@ PP.CFG = {
   COL: {
     paper:    0xf4efe4,   // cream sketchbook background
     ink:      0x141013,   // outline / linework black
-    skin:     0xf0b183,
+    skin:     0xf2bd97,
     skinDark: 0xc97f51,
     hair:     0x2c1d18,   // near-black dark brown, messy
     beard:    0x3a251c,
@@ -104,12 +104,30 @@ PP.CFG = {
     chrome:   0xb8c2cc,   // clipper body
     chromeDk: 0x6e7880,
     blade:    0xf2f4f6,
+    road:     0x4a4d55,   // asphalt
+    roadDark: 0x3a3d44,
+    lineMark: 0xf0e6c8,   // lane paint
+    lineMid:  0xf5c518,   // centre line
+    walk:     0x9c927e,   // sidewalk concrete
+    kerbCol:  0x867c6a,
     floor:    0xd9cfb8,
     floorAlt: 0xbfb199,
     wall:     0xece4d5,
     pole:     0xd94a4a,   // barber pole red
     poleB:    0x3f7fd0,   // barber pole blue
     serum:    0x57c98a,
-    pomade:   0x4fb0e0
+    pomade:   0x4fb0e0,
+
+    // Traffic. Stalled cars are the obstacles, so they want to read instantly
+    // as "solid thing in your lane" — saturated, high-contrast, inked.
+    cars: [0xe0b21f, 0xd94a4a, 0x3f7fd0, 0xe8e4da, 0x2f3540, 0x57a86b, 0xd97832],
+    glass:    0x8fb6cc,
+    tyre:     0x1d1f24,
+    lamp:     0x6e7880,
+    rigBody:  0xd6d0c2,
+    rigDeck:  0x5a616b,
+
+    // City facades, muted so the cream sky and the character stay dominant
+    bldg: [0xbfb6a6, 0xa89d8b, 0xc9c0ae, 0x938a7a, 0xd2c9b6, 0x8a8072]
   }
 };
