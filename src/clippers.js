@@ -99,17 +99,17 @@ PP.Clippers = (function () {
     }
 
     g.scale.setScalar(PP.CFG.CHASE_SCALE);
-    g.rotation.x = -0.18;  // jaws angled slightly down at the player
-    g.rotation.y = 0.34;   // three-quarter view so it reads as clippers
-    this.root.position.set(0, PP.CFG.CHASE_Y_FAR, PP.CFG.CHASE_Z_FAR);
+    g.rotation.x = -0.34;  // jaws angled down at the player's scalp
+    g.rotation.y = 0.5;    // angled in at him from the side
+    this.root.position.set(PP.CFG.CHASE_X_FAR, PP.CFG.CHASE_Y_FAR, PP.CFG.CHASE_Z_FAR);
   };
 
   Clippers.prototype.reset = function () {
     this.menace = 0;
     this.lunge = 0;
     this.lungeDir = 0;
-    this.x = 0;
-    this.root.position.set(0, PP.CFG.CHASE_Y_FAR, PP.CFG.CHASE_Z_FAR);
+    this.x = PP.CFG.CHASE_X_FAR;
+    this.root.position.set(PP.CFG.CHASE_X_FAR, PP.CFG.CHASE_Y_FAR, PP.CFG.CHASE_Z_FAR);
   };
 
   Clippers.prototype.addMenace = function (n) {
@@ -145,26 +145,28 @@ PP.Clippers = (function () {
       if (this.lunge <= 0) { this.lunge = 0; this.lungeDir = 0; }
     }
 
-    // Distance behind the player, eased so the approach feels weighty
+    // Everything is driven off `eased`: they swing in from the side, drop, and
+    // move toward the lens together, so closing in reads as one motion.
     const eased = U.easeOutCubic(this.menace);
+
     const baseZ = U.lerp(cfg.CHASE_Z_FAR, cfg.CHASE_Z_NEAR, eased);
-    const z = baseZ - this.lunge * (baseZ - 1.4);
+    const z = U.lerp(baseZ, cfg.CHASE_LUNGE_Z, this.lunge);
     this.root.position.z = U.damp(this.root.position.z, z, 7, dt);
 
-    // Track the player laterally, lagging behind so it reads as pursuit
-    this.x = U.damp(this.x, playerX, 3.2 + eased * 3, dt);
-    this.root.position.x = this.x;
-
-    // Height barely changes now. The camera leads the player, so the clippers
-    // simply loom larger as they close the gap — which does honestly what the
-    // old overhead swoop was faking.
     const baseY = U.lerp(cfg.CHASE_Y_FAR, cfg.CHASE_Y_NEAR, eased);
-    const y = baseY - this.lunge * (baseY - 2.3);
+    const y = U.lerp(baseY, cfg.CHASE_LUNGE_Y, this.lunge);
     this.root.position.y = U.damp(this.root.position.y, y, 8, dt);
 
-    // Tip the jaws down toward his scalp as they line up the cut
-    this.rig.rotation.x = U.damp(this.rig.rotation.x, -0.18 - eased * 0.3 - this.lunge * 0.35, 7, dt);
-    this.rig.rotation.y = U.damp(this.rig.rotation.y, 0.34 - eased * 0.22, 6, dt);
+    // Lateral: hold off to the side, and only cross over him on the strike.
+    const off = U.lerp(cfg.CHASE_X_FAR, cfg.CHASE_X_NEAR, eased);
+    const targetX = U.lerp(playerX * 0.6 + off, playerX, this.lunge);
+    this.x = U.damp(this.x, targetX, 3.2 + eased * 3, dt);
+    this.root.position.x = this.x;
+
+    // Angle in toward him — more as they close, hard over on the strike
+    this.rig.rotation.x = U.damp(this.rig.rotation.x, -0.34 - eased * 0.2 - this.lunge * 0.4, 7, dt);
+    this.rig.rotation.y = U.damp(this.rig.rotation.y, 0.5 + eased * 0.22 - this.lunge * 0.5, 6, dt);
+    this.rig.rotation.z = U.damp(this.rig.rotation.z, -0.2 - eased * 0.14, 6, dt);
 
     // Blades chatter faster the closer they get
     this.chatter += dt * (26 + eased * 40);
@@ -174,7 +176,7 @@ PP.Clippers = (function () {
     // Whole unit shakes with the motor
     this.rig.position.x = Math.sin(this.chatter * 1.7) * 0.03 * (0.4 + eased);
     this.rig.position.y = Math.cos(this.chatter * 2.3) * 0.03 * (0.4 + eased);
-    this.rig.rotation.z = Math.sin(this.chatter * 0.9) * 0.04 * (0.5 + eased);
+    this.rig.rotation.z += Math.sin(this.chatter * 0.9) * 0.03 * (0.5 + eased);
 
     // Speed lines only at pace
     const showLines = speed > 18;

@@ -41,14 +41,25 @@ PP.CFG = {
   // in the air just over his shoulder and DESCEND as menace rises: high and
   // small in the top of the frame when calm, down at head height and filling
   // the space behind him when they're about to strike.
-  // The camera leads the player, so the clippers chasing from behind him are
-  // FURTHER from the lens than he is — distance carries the threat all by
-  // itself. They start way back down the street and grow as they close.
-  CHASE_Z_FAR: 22.0,             // distance behind the player at menace 0
-  CHASE_Z_NEAR: 2.8,             // breathing down his neck at menace 1
-  CHASE_Y_FAR: 3.0,              // roughly head height throughout...
-  CHASE_Y_NEAR: 2.7,             // ...dipping slightly as they line up the cut
-  CHASE_SCALE: 1.15,             // overall size of the clipper rig
+  // The camera trails the player again, so the clippers can't convey threat by
+  // closing in behind him: anything further back than the camera is invisible,
+  // and anything directly between camera and player covers him up.
+  //
+  // So they hunt from one SIDE instead. They hang out over the sidewalk when
+  // he's clean and swing inward, downward and toward the lens as the meter
+  // fills — growing in frame without ever sitting on top of him. Only the
+  // lunge crosses over his head, which is the one moment occlusion is the
+  // whole point.
+  CHASE_X_FAR: 3.0,              // lateral offset at menace 0
+  CHASE_X_NEAR: 1.7,             // still clear of him at menace 1
+  CHASE_Z_FAR: 1.8,              // further from the lens = smaller
+  CHASE_Z_NEAR: 3.0,             // nearer the lens = looming
+  CHASE_Y_FAR: 5.6,
+  CHASE_Y_NEAR: 4.0,
+  CHASE_LUNGE_X: 0.0,            // the strike sweeps across onto his scalp
+  CHASE_LUNGE_Y: 3.0,
+  CHASE_LUNGE_Z: 4.2,
+  CHASE_SCALE: 0.56,             // overall size of the clipper rig
 
   // ---- Pickups ------------------------------------------------------------
   TUFT_VALUE: 10,
@@ -64,27 +75,22 @@ PP.CFG = {
     { at: 1200, density: 0.82, maxBlocked: 2 },
     { at: 2500, density: 0.92, maxBlocked: 2 }
   ],
-  SCENERY_X_MIN: 13.0,           // roadside props start this far out...
-  SCENERY_X_RANGE: 8.0,          // ...spread over this much more
+  SCENERY_X_MIN: 11.0,           // roadside props start this far out...
+  SCENERY_X_RANGE: 10.0,         // ...spread over this much more
+  SCENERY_PER_CHUNK: 6,          // roadside props spawned per track chunk
   MIN_REACTION: 0.55,            // seconds of clear runway guaranteed before any obstacle
 
   // ---- Camera -------------------------------------------------------------
-  // The camera flies backwards AHEAD of the player, looking back at him, so
-  // he runs toward the viewer and you can see his face and the clippers
-  // bearing down behind him. It rides high and pitched down, which stacks the
-  // frame cleanly: upcoming obstacles low, the player in the middle, the
-  // clippers and the receding street above him.
-  CAM_HEIGHT: 3.6,
-  CAM_LEAD_BASE: 7.5,            // how far ahead of the player the camera sits
-  CAM_LEAD_PER_SPEED: 0.40,      // ...plus this much per unit of speed, so the
-                                 //    runway stays readable as the pace climbs
-  CAM_LOOK_Y: 1.9,
-  CAM_LOOK_BEHIND: 2.0,          // aim just past him, into the chase
-  FOV_BASE: 44,
-  FOV_MAX: 92,                   // ceiling when widening for narrow phones
+  // Classic over-the-shoulder chase camera: behind and above the player,
+  // looking down the street he's running into.
+  CAM_HEIGHT: 5.0,
+  CAM_BACK: 9.0,
+  CAM_LOOK_AHEAD: 11,
+  CAM_LOOK_Y: 1.5,
+  FOV_BASE: 52,
+  FOV_MAX: 94,                   // ceiling when widening for narrow phones
   FRAME_HALF_WIDTH: 5.4,         // world half-extent that must stay in frame
-  CULL_BEHIND: 58,               // keep passed geometry alive this far back —
-                                 //    it's the visible background now
+  CULL_BEHIND: 12,               // recycle once it's safely past the camera
   FOV_MENACE: 9,                 // extra FOV punched in as the clippers close
   SHAKE_DECAY: 4.5,
 

@@ -156,50 +156,154 @@ PP.Player = (function () {
     this.aura = aura;
   };
 
-  /* ---- Hair stages: 3 = full mess, 0 = chrome dome ---------------------- */
-  Player.prototype.setHair = function (n) {
+  /* ---- Hair: this is the health bar ------------------------------------
+   *
+   * The camera sits behind him, so the top of his head is the part the player
+   * looks at all run. Each hit from the clippers mows a visible swath off it:
+   *
+   *   3  full messy mop
+   *   2  a strip buzzed clean through the middle, scalp showing
+   *   1  horseshoe only — the whole crown is gone
+   *   0  bald, and the run is over
+   *
+   * A bare scalp dome always sits under the hair so the shaved areas read as
+   * skin rather than as holes in the mesh.
+   */
+  Player.prototype.setHair = function (n, opts) {
     const U_ = U(), c = C();
+    const prev = this.hair;
     this.hair = Math.max(0, Math.min(PP.CFG.HAIR_MAX, n));
-    while (this.hairGroup.children.length) this.hairGroup.remove(this.hairGroup.children[0]);
 
-    if (this.hair <= 0) return; // fully bald
+    while (this.hairGroup.children.length) {
+      this.hairGroup.remove(this.hairGroup.children[0]);
+    }
 
-    const spike = (x, y, z, h, rot) => {
+    // Scalp: always present, so a buzzed patch shows skin underneath
+    if (!this.scalp) {
+      this.scalp = U_.inked(
+        new THREE.SphereGeometry(0.4, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.54),
+        c.skin, 0.045
+      );
+      this.scalp.position.y = 0.3;
+      this.scalp.scale.set(1.0, 0.82, 1.02);
+      this.head.add(this.scalp);
+    }
+
+    if (this.hair > 0) this._buildHair(this.hair);
+
+    // Puff of clippings whenever hair is actually lost
+    if (opts && opts.puff && this.hair < prev) this._puffClippings();
+  };
+
+  Player.prototype._buildHair = function (stage) {
+    const U_ = U(), c = C();
+    // Deterministic, so he has the same haircut every run rather than
+    // re-rolling a new one each time.
+    const rand = U_.rng(1337);
+
+    const spike = (x, y, z, h, tilt) => {
       const m = U_.inked(new THREE.ConeGeometry(0.105, h, 5), c.hair, 0.045);
       m.position.set(x, y, z);
-      m.rotation.set(rot[0], rot[1], rot[2]);
+      m.rotation.set(tilt[0], 0, tilt[1]);
       this.hairGroup.add(m);
     };
 
-    // Base cap — shrinks back as hair is lost
-    const capScale = this.hair === 3 ? 1 : this.hair === 2 ? 0.86 : 0.7;
-    const cap = U_.inked(new THREE.SphereGeometry(0.43, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.58), c.hair, 0.06);
-    cap.position.y = 0.3;
-    cap.scale.set(1.02 * capScale, this.hair === 1 ? 0.5 : 0.85, 1.02 * capScale);
-    this.hairGroup.add(cap);
+    if (stage === 3) {
+      // Full mop: cap plus spikes all over
+      const cap = U_.inked(
+        new THREE.SphereGeometry(0.43, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.58),
+        c.hair, 0.06
+      );
+      cap.position.y = 0.34;
+      cap.scale.set(1.02, 0.85, 1.02);
+      this.hairGroup.add(cap);
 
-    if (this.hair === 1) {
-      // Horseshoe: push the cap back off the crown, keep sides only
-      cap.position.set(0, 0.2, -0.06);
-      cap.scale.set(1.06, 0.42, 1.0);
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2 + rand() * 0.4;
+        const r = 0.1 + rand() * 0.22;
+        spike(Math.cos(a) * r, 0.5 + rand() * 0.07, Math.sin(a) * r * 0.85 - 0.03,
+              0.26 + rand() * 0.22, [(rand() - 0.5) * 0.9, (rand() - 0.5) * 0.9]);
+      }
       return;
     }
 
-    // Messy spikes, denser at full health. Deterministic so he looks the same
-    // every run rather than re-rolling a new haircut each time.
-    const count = this.hair === 3 ? 14 : 7;
-    const rand = U_.rng(1337);
-    for (let i = 0; i < count; i++) {
-      const a = (i / count) * Math.PI * 2 + rand() * 0.4;
-      const r = 0.12 + rand() * 0.2;
-      const h = 0.26 + rand() * 0.22;
-      spike(
-        Math.cos(a) * r,
-        0.5 + rand() * 0.07,
-        Math.sin(a) * r * 0.85 - 0.03,
-        h,
-        [(rand() - 0.5) * 0.9, 0, (rand() - 0.5) * 0.9]
-      );
+    if (stage === 2) {
+      // One clean strip mown straight through the middle. Built as two
+      // side panels with a gap, so the bare scalp shows down the centre.
+      [-1, 1].forEach((side) => {
+        const panel = U_.inked(
+          new THREE.SphereGeometry(0.42, 10, 8, 0, Math.PI, 0, Math.PI * 0.56),
+          c.hair, 0.055
+        );
+        panel.position.set(side * 0.13, 0.32, 0);
+        panel.rotation.y = side > 0 ? -Math.PI / 2 : Math.PI / 2;
+        panel.scale.set(0.82, 0.8, 1.0);
+        this.hairGroup.add(panel);
+      });
+      // Surviving spikes, only out at the sides
+      for (let i = 0; i < 9; i++) {
+        const side = i % 2 ? 1 : -1;
+        const r = 0.22 + rand() * 0.14;
+        const a = (rand() - 0.5) * 2.2;
+        spike(side * r, 0.46 + rand() * 0.06, Math.sin(a) * 0.26,
+              0.2 + rand() * 0.18, [(rand() - 0.5) * 0.8, side * 0.35]);
+      }
+      return;
+    }
+
+    // stage 1 — horseshoe: crown completely gone, a band round the back
+    // and sides only.
+    const band = U_.inked(
+      new THREE.TorusGeometry(0.33, 0.085, 7, 18, Math.PI * 1.35),
+      c.hair, 0.045
+    );
+    band.position.set(0, 0.2, 0.02);
+    band.rotation.set(Math.PI / 2, 0, -Math.PI * 0.18);
+    band.scale.set(1.12, 1.0, 1.0);
+    this.hairGroup.add(band);
+
+    for (let i = 0; i < 5; i++) {
+      const a = Math.PI * (0.25 + (i / 5) * 1.0);
+      spike(Math.cos(a) * 0.33, 0.24 + rand() * 0.04, Math.sin(a) * 0.3,
+            0.15 + rand() * 0.1, [(rand() - 0.5) * 0.6, (rand() - 0.5) * 0.6]);
+    }
+  };
+
+  /* A burst of clippings thrown off the scalp when the clippers connect. */
+  Player.prototype._puffClippings = function () {
+    const U_ = U(), c = C();
+    if (!this.clippings) {
+      this.clippings = [];
+      for (let i = 0; i < 22; i++) {
+        const bit = new THREE.Mesh(
+          new THREE.BoxGeometry(0.05, 0.012, 0.05),
+          new THREE.MeshBasicMaterial({ color: c.hair, transparent: true })
+        );
+        bit.visible = false;
+        this.root.add(bit);
+        this.clippings.push({ mesh: bit, vel: new THREE.Vector3(), life: 0 });
+      }
+    }
+    for (const cl of this.clippings) {
+      cl.mesh.visible = true;
+      cl.mesh.position.set((Math.random() - 0.5) * 0.4, 2.35, (Math.random() - 0.5) * 0.4);
+      cl.vel.set((Math.random() - 0.5) * 3.4, 1.4 + Math.random() * 2.6, (Math.random() - 0.5) * 2.2 + 1.2);
+      cl.mesh.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+      cl.life = 0.85 + Math.random() * 0.5;
+    }
+  };
+
+  Player.prototype._updateClippings = function (dt) {
+    if (!this.clippings) return;
+    for (const cl of this.clippings) {
+      if (cl.life <= 0) continue;
+      cl.life -= dt;
+      if (cl.life <= 0) { cl.mesh.visible = false; continue; }
+      cl.vel.y -= 9 * dt;
+      cl.mesh.position.addScaledVector(cl.vel, dt);
+      cl.mesh.rotation.x += dt * 7;
+      cl.mesh.rotation.z += dt * 5;
+      cl.mesh.material.opacity = Math.min(1, cl.life * 2);
     }
   };
 
@@ -286,6 +390,7 @@ PP.Player = (function () {
     if (this.stumble > 0) this.stumble -= dt;
 
     this.root.position.set(this.x, this.y, 0);
+    this._updateClippings(dt);
     this._animate(dt, speed);
   };
 
@@ -350,9 +455,10 @@ PP.Player = (function () {
     // Idle head bob
     this.head.rotation.x = Math.sin(this.runPhase * 2) * 0.045;
 
-    // Invulnerability blink
-    const blink = this.invuln > 0 ? (Math.sin(this.invuln * 34) > 0 ? 0.25 : 1) : 1;
-    this.body.visible = blink > 0.5;
+    // Invulnerability blink. Deliberately lopsided — visible roughly three
+    // quarters of the time — so it reads as flashing rather than as the
+    // character disappearing.
+    this.body.visible = this.invuln <= 0 || Math.sin(this.invuln * 30) > -0.5;
 
     // Shadow shrinks and fades as he rises
     const h = Math.max(0, this.y);
@@ -382,7 +488,7 @@ PP.Player = (function () {
       this.invuln = 0.6;
       return 'shielded';
     }
-    this.setHair(this.hair - 1);
+    this.setHair(this.hair - 1, { puff: true });
     this.invuln = PP.CFG.INVULN_TIME;
     this.stumble = 0.9;
     if (this.hair <= 0) { this.dead = true; return 'dead'; }

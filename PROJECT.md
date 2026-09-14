@@ -32,9 +32,11 @@ to treat as canonical; if the two drift, prefer the repo.
   tags, Three.js r128 vendored into `vendor/`. Every texture is drawn on a
   canvas at load time and every model is built from primitives. It runs by
   opening `index.html`, from Pages, and as an Artifact, all from one source.
-- **Camera leads the runner.** It flies backwards ahead of him looking back, so
-  you see his face and the clippers behind him. An earlier build trailed him,
-  which put the clippers behind the camera and invisible for the whole run.
+- **Camera trails the runner**, over the shoulder. This went back and forth: a
+  trailing camera hides a pursuer that chases from behind, and a leading camera
+  shows the face but puts obstacles behind the lens. Settled by keeping the
+  trailing camera and moving the clippers to hunt from the SIDE, which is the
+  only arrangement where both the player and the threat stay readable.
 - **Art direction: inked comic.** Cel shading, inverted-hull black outlines,
   cream paper sky. Taken from the hand-drawn character reference.
 - **Character is rebuilt in-engine.** The original illustration was never on
@@ -43,22 +45,20 @@ to treat as canonical; if the two drift, prefer the repo.
 
 ## Current state
 
-Complete and playable. 45 automated checks pass in Chromium.
+Complete and playable. 49 automated checks pass in Chromium.
 
 - Three lanes, jump and slide, speed 13 → 33 over about four minutes
 - Traffic obstacles: low car (vault), flatbed rig (slide under), box van (dodge)
 - Hair tufts for score and combo, serum regrows a stage, pomade shields one hit
 - Clippers close on every hit, lunge at full menace, take a hair stage
-- Synthesized WebAudio, keyboard (WASD and arrows) and touch, best score saved
+- Synthesized WebAudio — original chiptune plus effects — keyboard (WASD and
+  arrows) and touch, best score saved
+- Each snip physically mows hair off the top of his head, down to a bald scalp
 
 ## Outstanding
 
-- **Push to GitHub.** The repo could not be created from the build session —
-  the GitHub integration returned 403 on repo creation. Commits are ready
-  locally. Someone needs to create an empty public `petia-petty` (no README,
-  gitignore or license — the repo has all three), then push.
-- **Enable Pages** once pushed: Settings → Pages → Deploy from a branch →
-  `main` / `/ (root)`.
+- **Enable Pages**: Settings → Pages → Deploy from a branch → `main` /
+  `/ (root)`, which puts it at `xreetzx.github.io/petia-petty`.
 
 ## Working on it
 

@@ -320,31 +320,9 @@ PP.World = (function () {
       const g = new THREE.Group();
       const roll = Math.random();
 
-      if (roll < 0.62) {
-        // Building. Height varies a lot so the skyline has a rhythm.
-        const h = 6 + Math.random() * 15;
-        const w = 5.5 + Math.random() * 6;
-        const d = 6 + Math.random() * 8;
-        const tex = this.facades[(Math.random() * this.facades.length) | 0];
-        const mat = new THREE.MeshToonMaterial({
-          color: c.bldg[(Math.random() * c.bldg.length) | 0],
-          map: tex,
-          gradientMap: U.toonGradient()
-        });
-        const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-        U.outline(b, 0.12);
-        b.position.y = h / 2;
-        g.add(b);
-
-        // Ground-floor shopfront, so the street level isn't a blank wall
-        const shop = U.inked(new THREE.BoxGeometry(w * 0.99, 2.4, d * 0.99), 0x3a3f48, 0.08);
-        shop.position.y = 1.2;
-        g.add(shop);
-        // A narrow awning over the entrance only, not a band round the block
-        const awn = U.inked(new THREE.BoxGeometry(w * 0.42, 0.2, 0.9), c.pole, 0.05);
-        awn.position.set(0, 2.5, -d / 2 - 0.3);
-        g.add(awn);
-      } else if (roll < 0.84) {
+      if (roll < 0.74) {
+        this._buildTower(g);
+      } else if (roll < 0.90) {
         // Street lamp with an arm reaching over the road
         const post = U.inked(new THREE.CylinderGeometry(0.11, 0.15, 6.4, 8), c.lamp, 0.05);
         post.position.y = 3.2;
@@ -381,6 +359,108 @@ PP.World = (function () {
       return g;
     });
     this.scenery = [];
+  };
+
+
+  /* A Manhattan block: tiered setbacks as it rises, a water tower and rooftop
+   * clutter on top, fire escapes zig-zagging down the street face, and a dark
+   * ground-floor storefront. Built from primitives like everything else. */
+  World.prototype._buildTower = function (g) {
+    const U = PP.U, c = PP.CFG.COL;
+    const rand = Math.random;
+
+    const w = 5.5 + rand() * 6;
+    const d = 6 + rand() * 8;
+    const tone = c.bldg[(rand() * c.bldg.length) | 0];
+    const tex = this.facades[(rand() * this.facades.length) | 0];
+
+    // Two or three stacked tiers, each stepped in — the classic setback
+    // silhouette that makes a skyline read as New York rather than as boxes.
+    const tiers = 2 + ((rand() * 2) | 0);
+    let y = 0, tw = w, td = d, firstTierH = 0;
+    for (let i = 0; i < tiers; i++) {
+      const h = (i === 0 ? 9 + rand() * 12 : 5 + rand() * 9);
+      if (i === 0) firstTierH = h;
+      const mat = new THREE.MeshToonMaterial({
+        color: tone, map: tex, gradientMap: U.toonGradient()
+      });
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(tw, h, td), mat);
+      U.outline(seg, 0.13);
+      seg.position.y = y + h / 2;
+      g.add(seg);
+
+      // Cornice band marking each setback
+      const band = U.inked(new THREE.BoxGeometry(tw + 0.3, 0.32, td + 0.3), 0x6b6252, 0.06);
+      band.position.y = y + h;
+      g.add(band);
+
+      y += h;
+      tw *= 0.72 + rand() * 0.1;
+      td *= 0.72 + rand() * 0.1;
+    }
+
+    // Rooftop: water tower on legs, plus a vent block and an antenna
+    if (rand() < 0.75) {
+      const legH = 0.9;
+      [-1, 1].forEach((sx) => [-1, 1].forEach((sz) => {
+        const leg = U.inked(new THREE.BoxGeometry(0.12, legH, 0.12), 0x5c5242, 0.03);
+        leg.position.set(sx * 0.5, y + legH / 2, sz * 0.5);
+        g.add(leg);
+      }));
+      const tank = U.inked(new THREE.CylinderGeometry(0.72, 0.72, 1.5, 10), 0x7a5c42, 0.06);
+      tank.position.y = y + legH + 0.75;
+      g.add(tank);
+      const roof = U.inked(new THREE.ConeGeometry(0.84, 0.6, 10), 0x5c4330, 0.05);
+      roof.position.y = y + legH + 1.75;
+      g.add(roof);
+    }
+    if (rand() < 0.6) {
+      const vent = U.inked(new THREE.BoxGeometry(1.2, 0.6, 1.0), 0x8a8072, 0.05);
+      vent.position.set(tw * 0.45, y + 0.3, -td * 0.3);
+      g.add(vent);
+    }
+    if (rand() < 0.45) {
+      const mast = U.inked(new THREE.CylinderGeometry(0.05, 0.07, 3.4, 6), 0x5c5242, 0.03);
+      mast.position.set(-tw * 0.3, y + 1.7, td * 0.25);
+      g.add(mast);
+    }
+
+    // Fire escape down the street-facing side
+    if (rand() < 0.55) {
+      const iron = 0x5f5647;
+      // Only as many landings as fit on the ground tier: above that the
+      // building steps in and the ironwork would hang in mid-air.
+      const levels = Math.max(0, Math.min(5, Math.floor((firstTierH - 4.2) / 2.4)));
+      for (let i = 0; i < levels; i++) {
+        const fy = 3.6 + i * 2.4;
+        // Landing
+        const plat = U.inked(new THREE.BoxGeometry(0.7, 0.07, 1.9), iron, 0.02);
+        plat.position.set(-w / 2 - 0.35, fy, 0);
+        g.add(plat);
+        // Railing: a top rail on two thin uprights, not a solid slab
+        const top = U.inked(new THREE.BoxGeometry(0.05, 0.05, 1.9), iron, 0.015);
+        top.position.set(-w / 2 - 0.68, fy + 0.62, 0);
+        g.add(top);
+        [-1, 1].forEach((sz) => {
+          const up = U.inked(new THREE.BoxGeometry(0.05, 0.62, 0.05), iron, 0.015);
+          up.position.set(-w / 2 - 0.68, fy + 0.31, sz * 0.9);
+          g.add(up);
+        });
+        // Connecting flight, alternating sides
+        const stair = U.inked(new THREE.BoxGeometry(0.5, 0.06, 1.9), iron, 0.02);
+        stair.position.set(-w / 2 - 0.42, fy + 1.2, (i % 2 ? 1 : -1) * 0.5);
+        stair.rotation.x = (i % 2 ? 1 : -1) * 0.72;
+        g.add(stair);
+      }
+    }
+
+    // Ground floor: dark storefront with a small awning over the door
+    const shop = U.inked(new THREE.BoxGeometry(w * 0.99, 2.4, d * 0.99), 0x3a3f48, 0.08);
+    shop.position.y = 1.2;
+    g.add(shop);
+    const awn = U.inked(new THREE.BoxGeometry(w * 0.4, 0.2, 0.9), c.pole, 0.05);
+    awn.position.set(0, 2.5, -d / 2 - 0.3);
+    g.add(awn);
   };
 
   /* A building facade: rows of windows, drawn once and reused. */
@@ -506,7 +586,7 @@ PP.World = (function () {
     // Scenery along both kerbs, facing inward toward the street. It sits well
     // outside the track: any closer and a shopfront swallows half the frame
     // as the camera slides past it.
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < cfgS.SCENERY_PER_CHUNK; i++) {
       const s = this.sceneryPool.get();
       const side = rand() < 0.5 ? -1 : 1;
       s.position.set(
