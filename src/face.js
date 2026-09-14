@@ -31,18 +31,16 @@ PP.Face = (function () {
     eyeY: 232, eyeDx: 84, eyeRx: 46, eyeRy: 27,
     noseTop: 236, noseTip: 304,
     mouthY: 362,
-    beardTopSide: 246,      // where the sideburn meets the ear
-    beardLineMid: 330       // the beard's cheek line, centre of the face
+    beardTopSide: 250,      // where the sideburn meets the ear
+    beardLineMid: 326       // the beard's cheek line, centre of the face
   };
 
   /* Where the bare spots sit: [x, y, radiusX, radiusY, rotation].
    * The big one on the viewer's right is the prominent patch in the reference
    * drawing; the smaller ones are the scatter that comes with it. */
   const PATCHES = [
-    [332, 388, 42, 34,  0.20],
-    [170, 418, 26, 21, -0.32],
-    [256, 452, 19, 14,  0.08],
-    [348, 424, 16, 13,  0.30]
+    [330, 384, 46, 37,  0.20],   // the prominent one, on his left cheek
+    [176, 424, 22, 17, -0.30]    // one smaller spot along the far jaw
   ];
 
   // ---- Skin ---------------------------------------------------------------
@@ -97,24 +95,34 @@ PP.Face = (function () {
     // The upper edge is the cheek line: high at the ears, dipping to just
     // under the nose in the middle.
     ctx.beginPath();
-    ctx.moveTo(P.cx - 144, P.beardTopSide);
-    ctx.quadraticCurveTo(P.cx - 156, 368, P.cx - 92, 444);
-    ctx.quadraticCurveTo(P.cx, P.faceBottom + 8, P.cx + 92, 444);
-    ctx.quadraticCurveTo(P.cx + 156, 368, P.cx + 144, P.beardTopSide);
-    // back along the cheek line
-    ctx.quadraticCurveTo(P.cx + 110, 306, P.cx + 62, P.beardLineMid);
-    ctx.quadraticCurveTo(P.cx, P.beardLineMid + 8, P.cx - 62, P.beardLineMid);
-    ctx.quadraticCurveTo(P.cx - 110, 306, P.cx - 144, P.beardTopSide);
+    ctx.moveTo(P.cx - 150, P.beardTopSide);
+    ctx.quadraticCurveTo(P.cx - 162, 372, P.cx - 94, 452);
+    ctx.quadraticCurveTo(P.cx, P.faceBottom + 14, P.cx + 94, 452);
+    ctx.quadraticCurveTo(P.cx + 162, 372, P.cx + 150, P.beardTopSide);
+    // Back along the cheek line. It rides high under the cheekbones and only
+    // dips in the middle to clear the mouth — a full beard, as in the
+    // reference, not a chinstrap.
+    // Walk the cheek line back with a little wobble rather than sweeping two
+    // clean arcs — a smooth boundary reads as a shape laid over the face.
+    const wob = PP.U.rng(515);
+    for (let i = 0; i <= 26; i++) {
+      const t = i / 26;                       // 0 at the right ear, 1 at the left
+      const x = P.cx + 150 - t * 300;
+      const arc = Math.sin(t * Math.PI);
+      const y = P.beardTopSide + arc * (P.beardLineMid - P.beardTopSide + 16)
+                + (wob() - 0.5) * 13;
+      ctx.lineTo(x, y);
+    }
     ctx.closePath();
     ctx.fill();
 
     // Moustache, reaching up under the nose
     ctx.beginPath();
-    ctx.moveTo(P.cx - 78, 344);
-    ctx.quadraticCurveTo(P.cx - 40, 312, P.cx, 316);
-    ctx.quadraticCurveTo(P.cx + 40, 312, P.cx + 78, 344);
-    ctx.quadraticCurveTo(P.cx + 40, 356, P.cx, 352);
-    ctx.quadraticCurveTo(P.cx - 40, 356, P.cx - 78, 344);
+    ctx.moveTo(P.cx - 88, 340);
+    ctx.quadraticCurveTo(P.cx - 44, 300, P.cx, 306);
+    ctx.quadraticCurveTo(P.cx + 44, 300, P.cx + 88, 340);
+    ctx.quadraticCurveTo(P.cx + 44, 352, P.cx, 348);
+    ctx.quadraticCurveTo(P.cx - 44, 352, P.cx - 88, 340);
     ctx.closePath();
     ctx.fill();
 
@@ -135,9 +143,9 @@ PP.Face = (function () {
     }
 
     // Stubble fading up into the cheek along the beard line
-    for (let i = 0; i < 260; i++) {
-      const x = P.cx - 150 + Math.random() * 300;
-      const t = (x - (P.cx - 150)) / 300;
+    for (let i = 0; i < 420; i++) {
+      const x = P.cx - 158 + Math.random() * 316;
+      const t = (x - (P.cx - 158)) / 316;
       const edge = P.beardTopSide + Math.sin(t * Math.PI) * (P.beardLineMid - P.beardTopSide + 6);
       const y = edge - Math.random() * 30;
       ctx.lineWidth = 1.5 + Math.random() * 1.4;
@@ -149,8 +157,25 @@ PP.Face = (function () {
     }
     ctx.globalAlpha = 1;
 
+    // Strands through the whole mass, so it reads as hair rather than paint
+    const strandRand = PP.U.rng(8080);
+    for (let i = 0; i < 900; i++) {
+      const x = P.cx - 160 + strandRand() * 320;
+      const y = 300 + strandRand() * 190;
+      const len = 7 + strandRand() * 13;
+      const ang = Math.PI / 2 + (strandRand() - 0.5) * 0.7;
+      ctx.strokeStyle = strandRand() < 0.5 ? '#4e3327' : '#2a1a13';
+      ctx.globalAlpha = 0.25 + strandRand() * 0.45;
+      ctx.lineWidth = 1.2 + strandRand() * 1.3;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(ang) * len * 0.3, y + Math.sin(ang) * len);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
     // Ink weight low on the chin
-    PP.U.hatch(ctx, 130, 380, 252, 110, 6, Math.PI / 2.3, 0.2, '#000');
+    PP.U.hatch(ctx, 130, 396, 252, 100, 7, Math.PI / 2.3, 0.14, '#000');
   }
 
   /* Punch the bare spots straight through the beard layer so the skin already
@@ -197,19 +222,30 @@ PP.Face = (function () {
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(rot);
+      // Bare skin, warmed very slightly — the point is that hair is missing,
+      // not that there's a mark on him.
       const g = ctx.createRadialGradient(0, 0, 1, 0, 0, Math.max(rx, ry));
-      g.addColorStop(0, 'rgba(232,158,128,0.5)');
-      g.addColorStop(0.7, 'rgba(232,158,128,0.22)');
-      g.addColorStop(1, 'rgba(232,158,128,0)');
+      g.addColorStop(0, 'rgba(236,176,140,0.55)');
+      g.addColorStop(0.62, 'rgba(236,176,140,0.3)');
+      g.addColorStop(1, 'rgba(236,176,140,0)');
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.ellipse(0, 0, rx * 0.95, ry * 0.95, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = 'rgba(92,56,42,0.34)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, rx * 0.88, ry * 0.88, 0, 0, Math.PI * 2);
-      ctx.stroke();
+      // Stubble creeping back in at the rim, so the edge isn't a clean cut
+      ctx.strokeStyle = hex(C().beard);
+      ctx.lineCap = 'round';
+      for (let i = 0; i < 26; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const rr = 0.72 + Math.random() * 0.3;
+        ctx.globalAlpha = 0.3 + Math.random() * 0.4;
+        ctx.lineWidth = 1.3 + Math.random();
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * rx * rr, Math.sin(a) * ry * rr);
+        ctx.lineTo(Math.cos(a) * rx * (rr + 0.22), Math.sin(a) * ry * (rr + 0.22));
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
       ctx.restore();
     }
   }
@@ -312,41 +348,57 @@ PP.Face = (function () {
       return;
     }
 
-    const open = mode === 'panic' ? 26 : 15;
-    const halfW = 52;
+    const open = mode === 'panic' ? 19 : 11;
+    const halfW = 46;
 
-    // Mouth cavity
-    ctx.fillStyle = '#54202c';
+    // Lips: a thin warm edge, not a ring of lipstick round the opening
+    ctx.fillStyle = 'rgba(168,96,90,0.85)';
+    ctx.beginPath();
+    ctx.ellipse(P.cx, P.mouthY, halfW + 6, open + 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#4e2028';
     ctx.beginPath();
     ctx.ellipse(P.cx, P.mouthY, halfW, open, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Upper teeth only — a full set reads as a grin, not a yell
+    /* A hint of upper teeth, nothing more.
+     * Two earlier attempts drew a bright white band across a dark opening —
+     * once with hard dividing lines, once with faint ones — and both read as
+     * a gap-toothed grin at any distance. The fix is contrast, not detail:
+     * warm ivory rather than white, occupying only the top of the opening,
+     * with no seams at all. */
     ctx.save();
     ctx.beginPath();
     ctx.ellipse(P.cx, P.mouthY, halfW, open, 0, 0, Math.PI * 2);
     ctx.clip();
-    ctx.fillStyle = '#f6f2e8';
-    ctx.fillRect(P.cx - halfW, P.mouthY - open, halfW * 2, open * 0.72);
-    ctx.strokeStyle = 'rgba(20,16,19,0.28)';
-    ctx.lineWidth = 1.6;
-    for (let i = -2; i <= 2; i++) {
-      ctx.beginPath();
-      ctx.moveTo(P.cx + i * 21, P.mouthY - open);
-      ctx.lineTo(P.cx + i * 21, P.mouthY - open * 0.28);
-      ctx.stroke();
-    }
+    ctx.fillStyle = '#e8ddc6';
+    ctx.beginPath();
+    ctx.moveTo(P.cx - halfW, P.mouthY - open);
+    ctx.lineTo(P.cx + halfW, P.mouthY - open);
+    ctx.lineTo(P.cx + halfW * 0.9, P.mouthY - open * 0.18);
+    ctx.quadraticCurveTo(P.cx, P.mouthY + open * 0.04, P.cx - halfW * 0.9, P.mouthY - open * 0.18);
+    ctx.closePath();
+    ctx.fill();
+    // Shadow where the top lip overhangs
+    ctx.fillStyle = 'rgba(40,16,22,0.34)';
+    ctx.fillRect(P.cx - halfW, P.mouthY - open, halfW * 2, 4.5);
     ctx.restore();
 
-    // Lower lip catching light below the opening
-    ctx.fillStyle = 'rgba(190,104,104,0.5)';
+    ctx.fillStyle = 'rgba(190,112,104,0.6)';
     ctx.beginPath();
-    ctx.ellipse(P.cx, P.mouthY + open * 0.78, halfW * 0.82, open * 0.34, 0, 0, Math.PI * 2);
+    ctx.ellipse(P.cx, P.mouthY + open * 0.86, halfW * 0.74, open * 0.28, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.strokeStyle = ink; ctx.lineWidth = 4;
+    // Inked mouth line, heavier on top
+    ctx.strokeStyle = ink; ctx.lineCap = 'round';
+    ctx.lineWidth = 4.4;
     ctx.beginPath();
-    ctx.ellipse(P.cx, P.mouthY, halfW, open, 0, 0, Math.PI * 2);
+    ctx.ellipse(P.cx, P.mouthY, halfW + 4, open + 5, 0, Math.PI * 0.98, Math.PI * 2.02);
+    ctx.stroke();
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.ellipse(P.cx, P.mouthY, halfW + 4, open + 5, 0, 0, Math.PI);
     ctx.stroke();
   }
 
