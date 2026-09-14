@@ -6,7 +6,14 @@ PP.Player = (function () {
   'use strict';
 
   const U = () => PP.U;
-  const C = () => PP.CFG.COL;
+  // Colours come from the selected character, so adding a character is data
+  // rather than another branch in here.
+  const C = () => new Proxy(PP.CFG.COL, {
+    get(target, key) {
+      const cc = PP.Characters && PP.Characters.current().colors;
+      return (cc && cc[key] != null) ? cc[key] : target[key];
+    }
+  });
 
   function Player(scene) {
     this.root = new THREE.Group();
@@ -30,6 +37,7 @@ PP.Player = (function () {
     this.shield = 0;
     this.stumble = 0;       // >0 while doing the look-back animation
     this.runPhase = 0;
+    this.lookT = 0;          // drives the periodic glance over the shoulder
     this.dead = false;
 
     this._build();
@@ -421,13 +429,15 @@ PP.Player = (function () {
     this.y = 0; this.vy = 0;
     this.grounded = true; this.sliding = false; this.slideT = 0; this.airT = 0;
     this.invuln = 0; this.shield = 0; this.stumble = 0; this.dead = false;
-    this.runPhase = 0;
+    this.runPhase = 0; this.lookT = 0;
     this.setHair(PP.CFG.HAIR_MAX);
     this.aura.visible = false;
     this.body.visible = true;   // clear any half-finished invuln blink
     this.root.rotation.set(0, 0, 0);
     this.body.rotation.set(0, 0, 0);
     this.body.position.set(0, 0, 0);
+    this.twist = 0;
+    this.head.rotation.set(0, 0, 0);
   };
 
   /* ---- Input ----------------------------------------------------------- */
@@ -554,13 +564,37 @@ PP.Player = (function () {
     // Lean into lane changes
     const leanTarget = (PP.CFG.LANE_X[this.targetLane] - this.x) * 0.34;
     this.body.rotation.z = U_.damp(this.body.rotation.z, leanTarget, 12, dt);
+    this.body.rotation.y = this.twist || 0;
 
-    // Look back at the clippers while stumbling
-    const lookBack = this.stumble > 0 ? 2.3 : 0;
-    this.head.rotation.y = U_.damp(this.head.rotation.y, lookBack, 9, dt);
-    this.head.rotation.z = U_.damp(this.head.rotation.z, this.stumble > 0 ? 0.25 : 0, 9, dt);
+    /* Look back at the clippers.
+     *
+     * Two sources: a hard snap while stumbling from a hit, and a steady
+     * nervous glance the rest of the time — roughly two seconds facing
+     * forward, two seconds looking back. He turns over his RIGHT shoulder,
+     * which is the side the clippers actually hunt from.
+     *
+     * He faces -Z, so a positive Y rotation turns him toward -X (his left).
+     * Looking right means a negative angle.
+     */
+    this.lookT += dt;
+    const CYCLE = PP.CFG.LOOK_FORWARD + PP.CFG.LOOK_BACK;
+    if (this.lookT > CYCLE) this.lookT -= CYCLE;
+    const glancing = this.lookT > PP.CFG.LOOK_FORWARD;
+
+    const lookBack = (this.stumble > 0 || glancing) ? -PP.CFG.LOOK_ANGLE : 0;
+    this.head.rotation.y = U_.damp(this.head.rotation.y, lookBack, 7, dt);
+    // Tip the head as he cranes round, and a little more when actually hit
+    this.head.rotation.z = U_.damp(
+      this.head.rotation.z,
+      this.stumble > 0 ? -0.3 : (glancing ? -0.16 : 0), 7, dt
+    );
+    // The shoulders follow a fraction of the way, so it's a turn and not an
+    // owl swivel. Body twist rides on top of the lean from lane changes.
+    this.twist = U_.damp(this.twist || 0, lookBack * 0.22, 6, dt);
+
     // Idle head bob
-    this.head.rotation.x = Math.sin(this.runPhase * 2) * 0.045;
+    this.head.rotation.x = Math.sin(this.runPhase * 2) * 0.045
+      + (glancing ? -0.06 : 0);
 
     // Invulnerability blink. Deliberately lopsided — visible roughly three
     // quarters of the time — so it reads as flashing rather than as the

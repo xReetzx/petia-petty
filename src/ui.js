@@ -26,7 +26,8 @@ PP.UI = (function () {
     ['hud', 'score', 'dist', 'combo', 'hair', 'menaceFill',
      'screenTitle', 'screenPause', 'screenOver',
      'bestTitle', 'finalScore', 'finalDist', 'finalBest', 'deathLine',
-     'toast', 'muteBtn', 'pauseBtn', 'newBest'].forEach((k) => { el[k] = $(k); });
+     'toast', 'muteBtn', 'pauseBtn', 'newBest',
+     'roster', 'charName', 'charBlurb'].forEach((k) => { el[k] = $(k); });
   }
 
   function show(which) {
@@ -93,5 +94,53 @@ PP.UI = (function () {
     }
   }
 
-  return { init, show, setHair, setScore, setMenace, toast, setBest, gameOver, setMuted, DEATH_LINES };
+  /* ---- Character select ------------------------------------------------
+   * Cards are built from the roster, so a new character appears here with no
+   * change to this file. onPick is called with the character id.
+   */
+  function buildRoster(onPick) {
+    if (!el.roster) return;
+    el.roster.innerHTML = '';
+    PP.Characters.all().forEach((ch) => {
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'char-card' + (ch.locked ? ' locked' : '');
+      card.id = 'char-' + ch.id;
+      card.setAttribute('aria-label', ch.locked ? 'Locked slot' : 'Play as ' + ch.name);
+      if (ch.locked) card.disabled = true;
+
+      const art = ch.locked ? PP.Face.portraitLocked(220) : PP.Face.portrait(ch, 220);
+      art.className = 'char-art';
+      card.appendChild(art);
+
+      const nm = document.createElement('span');
+      nm.className = 'char-name';
+      nm.textContent = ch.name;
+      card.appendChild(nm);
+
+      if (ch.locked) {
+        const tag = document.createElement('span');
+        tag.className = 'char-soon';
+        tag.textContent = 'SOON';
+        card.appendChild(tag);
+      }
+
+      card.addEventListener('click', () => { if (!ch.locked) onPick(ch.id); });
+      el.roster.appendChild(card);
+    });
+    markSelected();
+  }
+
+  function markSelected() {
+    if (!el.roster) return;
+    const cur = PP.Characters.current();
+    el.roster.querySelectorAll('.char-card').forEach((c) => {
+      c.classList.toggle('on', c.id === 'char-' + cur.id);
+    });
+    if (el.charName) el.charName.textContent = cur.name;
+    if (el.charBlurb) el.charBlurb.textContent = cur.locked ? '' : '\u2014 ' + cur.blurb;
+  }
+
+  return { init, show, setHair, setScore, setMenace, toast, setBest, gameOver,
+           setMuted, buildRoster, markSelected, DEATH_LINES };
 })();

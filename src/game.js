@@ -56,6 +56,7 @@ window.PP = window.PP || {};
     hitFlash = document.getElementById('flash');
 
     PP.UI.init();
+    PP.UI.buildRoster(pickCharacter);
     PP.UI.setBest(G.best);
     PP.UI.setHair(PP.CFG.HAIR_MAX, PP.CFG.HAIR_MAX);
     PP.UI.show('title');
@@ -175,6 +176,18 @@ window.PP = window.PP || {};
     if (mb) mb.addEventListener('click', toggleMute);
     const pb = document.getElementById('pauseBtn');
     if (pb) pb.addEventListener('click', togglePause);
+  }
+
+  /* Swapping character rebuilds the model in place: colours are read through
+   * the roster, so a fresh Player picks up the new palette. */
+  function pickCharacter(id) {
+    if (!PP.Characters.select(id)) return;
+    scene.remove(player.root);
+    player = new PP.Player(scene);
+    player.reset();
+    PP.Audio.sfx.lane();
+    PP.UI.markSelected();
+    PP.UI.setHair(PP.CFG.HAIR_MAX, PP.CFG.HAIR_MAX);
   }
 
   function toggleMute() {
@@ -466,6 +479,10 @@ window.PP = window.PP || {};
     playerY: () => +player.y.toFixed(3),
     sliding: () => player.sliding,
     musicPlaying: () => PP.Audio.music.playing,
+    character: () => PP.Characters.id,
+    pickCharacter: (id) => pickCharacter(id),
+    rosterCount: () => document.querySelectorAll('.char-card').length,
+    headYaw: () => +player.head.rotation.y.toFixed(3),
     /* Horizontal gap between the clippers and the player in normalised screen
      * space. The whole point of hunting from the side is that this stays
      * positive, so the harness checks it rather than trusting the geometry. */

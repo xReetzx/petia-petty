@@ -16,6 +16,12 @@ PP.CFG = {
   GRAVITY: -58,
   JUMP_V: 15.6,                  // ~1.9u apex, ~0.72s airtime at this gravity
   SLIDE_TIME: 0.6,
+  // How often he glances back at the clippers: seconds facing forward, then
+  // seconds looking over his shoulder, on a loop.
+  LOOK_FORWARD: 2.0,
+  LOOK_BACK: 2.0,
+  LOOK_ANGLE: 2.2,               // radians; negative is applied, i.e. rightward
+
   COYOTE_TIME: 0.09,             // late jumps still register
   INPUT_BUFFER: 0.14,            // early jump/slide presses are remembered
 

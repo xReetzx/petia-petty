@@ -1,0 +1,15 @@
+{
+  "name": "petia-petty",
+  "version": "1.0.0",
+  "private": true,
+  "description": "An endless runner where a giant pair of clippers is chasing you and your hair is the health bar.",
+  "license": "MIT",
+  "scripts": {
+    "serve": "node tools/serve.js 8777",
+    "test": "node tools/test.js",
+    "capture": "node tools/capture.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.1"
+  }
+}

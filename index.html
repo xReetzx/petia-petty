@@ -203,6 +203,49 @@
   .best-line{
     margin-top:18px;font-size:12px;font-weight:900;letter-spacing:2px;opacity:.65;
   }
+
+  /* ---- Character select ------------------------------------------------ */
+  .roster-wrap{margin-top:22px;display:flex;flex-direction:column;align-items:center;gap:10px;}
+  .roster-head{
+    margin:0;font-size:11px;font-weight:900;letter-spacing:2.4px;
+    text-transform:uppercase;opacity:.55;
+  }
+  .roster{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;}
+  .char-card{
+    position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;
+    padding:8px 8px 10px;cursor:pointer;font-family:inherit;
+    background:var(--paper);
+    border:3px solid var(--ink);border-radius:16px;
+    box-shadow:4px 5px 0 var(--ink);
+    transition:transform .1s, box-shadow .1s, border-color .1s;
+  }
+  .char-card:hover:not(.locked){transform:translate(-1px,-2px);box-shadow:5px 7px 0 var(--ink);}
+  .char-card:active:not(.locked){transform:translate(4px,5px);box-shadow:0 0 0 var(--ink);}
+  .char-card.on{
+    border-color:var(--maroon);
+    box-shadow:4px 5px 0 var(--maroon), 0 0 0 4px var(--marker);
+  }
+  .char-card.locked{cursor:not-allowed;opacity:.45;box-shadow:3px 4px 0 rgba(20,16,19,.4);}
+  .char-art{
+    width:clamp(74px,19vw,104px);height:clamp(74px,19vw,104px);
+    display:block;border-radius:11px;
+  }
+  .char-name{font-size:13px;font-weight:900;letter-spacing:.6px;}
+  .char-soon{
+    position:absolute;top:6px;right:6px;
+    background:var(--ink);color:var(--paper);
+    font-size:8px;font-weight:900;letter-spacing:1.2px;
+    padding:2px 6px;border-radius:999px;
+  }
+  .roster-meta{
+    margin:0;font-size:12px;font-weight:700;opacity:.72;
+    min-height:1.2em;text-align:center;max-width:32ch;line-height:1.4;
+  }
+  .roster-meta b{font-weight:900;}
+  @media (max-height:700px){
+    .roster-wrap{margin-top:14px;gap:6px}
+    .char-art{width:clamp(58px,15vw,78px);height:clamp(58px,15vw,78px)}
+  }
   .best-line b{font-size:17px;letter-spacing:0;}
 
   /* Game over */
@@ -289,6 +332,13 @@
      catch you, they take a little off the top.</p>
   <button class="btn" data-action="play">Run</button>
   <div class="best-line">BEST <b id="bestTitle">—</b></div>
+
+  <section class="roster-wrap" aria-label="Character select">
+    <h2 class="roster-head">Choose your runner</h2>
+    <div class="roster" id="roster"></div>
+    <p class="roster-meta"><b id="charName">Petty</b> <span id="charBlurb"></span></p>
+  </section>
+
   <p class="sub" style="margin-top:14px;font-weight:900;letter-spacing:.5px;">
      Keyboard: <b>W</b> jump &nbsp;<b>A</b>/<b>D</b> lanes &nbsp;<b>S</b> slide</p>
 
@@ -331,6 +381,7 @@
 <script src="src/utils.js"></script>
 <script src="src/audio.js"></script>
 <script src="src/face.js"></script>
+<script src="src/characters.js"></script>
 <script src="src/player.js"></script>
 <script src="src/clippers.js"></script>
 <script src="src/world.js"></script>

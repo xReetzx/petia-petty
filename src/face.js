@@ -526,10 +526,138 @@ PP.Face = (function () {
     return cache[mode];
   }
 
+
+  /* ---- Portrait card -----------------------------------------------------
+   * A framed head-and-shoulders for the character select panel. Drawn on a
+   * canvas rather than rendered from the 3D scene: the face is already a
+   * canvas texture, so composing hair and shoulders around it is cheaper and
+   * sharper than grabbing a second WebGL view, and it's the one place the
+   * player gets a proper look at him.
+   */
+  function portrait(character, size) {
+    const P_ = size || 320;
+    const cv = document.createElement('canvas');
+    cv.width = P_; cv.height = P_;
+    const ctx = cv.getContext('2d');
+    const cc = (character && character.colors) || {};
+    const hairCol = hex(cc.hair != null ? cc.hair : C().hair);
+    const shirtCol = hex(cc.shirt != null ? cc.shirt : C().shirt);
+    const ink = hex(C().ink);
+
+    // Paper ground with a soft vignette
+    ctx.fillStyle = hex(C().paper);
+    ctx.fillRect(0, 0, P_, P_);
+    const vg = ctx.createRadialGradient(P_ / 2, P_ * 0.44, P_ * 0.1, P_ / 2, P_ * 0.5, P_ * 0.62);
+    vg.addColorStop(0, 'rgba(245,197,24,0.20)');
+    vg.addColorStop(1, 'rgba(245,197,24,0)');
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, P_, P_);
+
+    const cx = P_ / 2;
+
+    // Shoulders first, so the head overlaps them
+    ctx.fillStyle = shirtCol;
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = P_ * 0.026;
+    ctx.beginPath();
+    ctx.moveTo(cx - P_ * 0.40, P_);
+    ctx.quadraticCurveTo(cx - P_ * 0.34, P_ * 0.76, cx, P_ * 0.74);
+    ctx.quadraticCurveTo(cx + P_ * 0.34, P_ * 0.76, cx + P_ * 0.40, P_);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+
+    // Head: the face texture, clipped to a rounded jaw
+    const hw = P_ * 0.25, hy = P_ * 0.12, hh = P_ * 0.62;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(cx - hw, hy + hh * 0.18);
+    ctx.lineTo(cx - hw, hy + hh * 0.62);
+    ctx.quadraticCurveTo(cx - hw, hy + hh, cx, hy + hh);
+    ctx.quadraticCurveTo(cx + hw, hy + hh, cx + hw, hy + hh * 0.62);
+    ctx.lineTo(cx + hw, hy + hh * 0.18);
+    ctx.quadraticCurveTo(cx, hy - hh * 0.04, cx - hw, hy + hh * 0.18);
+    ctx.closePath();
+    ctx.clip();
+    const faceTex = build('determined');
+    ctx.drawImage(faceTex.image, cx - hw, hy, hw * 2, hh);
+    faceTex.dispose();
+    ctx.restore();
+
+    // Jaw outline over the top
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = P_ * 0.022;
+    ctx.beginPath();
+    ctx.moveTo(cx - hw, hy + hh * 0.2);
+    ctx.lineTo(cx - hw, hy + hh * 0.62);
+    ctx.quadraticCurveTo(cx - hw, hy + hh, cx, hy + hh);
+    ctx.quadraticCurveTo(cx + hw, hy + hh, cx + hw, hy + hh * 0.62);
+    ctx.lineTo(cx + hw, hy + hh * 0.2);
+    ctx.stroke();
+
+    // Messy hair on top, spikes and all
+    ctx.fillStyle = hairCol;
+    ctx.beginPath();
+    ctx.moveTo(cx - hw * 1.1, hy + hh * 0.3);
+    ctx.quadraticCurveTo(cx - hw * 1.16, hy - hh * 0.08, cx, hy - hh * 0.1);
+    ctx.quadraticCurveTo(cx + hw * 1.16, hy - hh * 0.08, cx + hw * 1.1, hy + hh * 0.3);
+    ctx.quadraticCurveTo(cx + hw * 0.8, hy + hh * 0.12, cx, hy + hh * 0.14);
+    ctx.quadraticCurveTo(cx - hw * 0.8, hy + hh * 0.12, cx - hw * 1.1, hy + hh * 0.3);
+    ctx.closePath();
+    ctx.fill();
+
+    const rnd = PP.U.rng(7);
+    for (let i = 0; i < 13; i++) {
+      const t = i / 12;
+      const x = cx - hw * 1.05 + t * hw * 2.1;
+      const baseY = hy - hh * 0.06 + Math.abs(t - 0.5) * hh * 0.24;
+      const h = hh * (0.1 + rnd() * 0.13);
+      ctx.beginPath();
+      ctx.moveTo(x - P_ * 0.028, baseY + P_ * 0.02);
+      ctx.lineTo(x + (rnd() - 0.5) * P_ * 0.05, baseY - h);
+      ctx.lineTo(x + P_ * 0.028, baseY + P_ * 0.02);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = P_ * 0.018;
+    ctx.beginPath();
+    ctx.moveTo(cx - hw * 1.08, hy + hh * 0.29);
+    ctx.quadraticCurveTo(cx - hw * 1.14, hy - hh * 0.07, cx, hy - hh * 0.09);
+    ctx.quadraticCurveTo(cx + hw * 1.14, hy - hh * 0.07, cx + hw * 1.08, hy + hh * 0.29);
+    ctx.stroke();
+
+    return cv;
+  }
+
+  /** A greyed-out silhouette for roster slots that aren't filled yet. */
+  function portraitLocked(size) {
+    const P_ = size || 320;
+    const cv = document.createElement('canvas');
+    cv.width = P_; cv.height = P_;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = hex(C().paper);
+    ctx.fillRect(0, 0, P_, P_);
+    ctx.fillStyle = 'rgba(20,16,19,0.16)';
+    ctx.beginPath();
+    ctx.arc(P_ / 2, P_ * 0.4, P_ * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(P_ * 0.14, P_);
+    ctx.quadraticCurveTo(P_ * 0.5, P_ * 0.58, P_ * 0.86, P_);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(20,16,19,0.4)';
+    ctx.font = '900 ' + Math.round(P_ * 0.26) + 'px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('?', P_ / 2, P_ * 0.4);
+    return cv;
+  }
+
   const sideCache = {}, backCache = {}, underCache = {};
   const side = () => (sideCache.t || (sideCache.t = sideTexture()));
   const back = () => (backCache.t || (backCache.t = backTexture()));
   const under = () => (underCache.t || (underCache.t = underTexture()));
 
-  return { get, build, side, back, under, PATCHES };
+  return { get, build, side, back, under, portrait, portraitLocked, PATCHES };
 })();
