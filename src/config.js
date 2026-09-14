@@ -13,9 +13,52 @@ PP.CFG = {
   SPEED_START: 13,
   SPEED_MAX: 33,
   SPEED_RAMP_TIME: 240,          // seconds to reach SPEED_MAX (eased)
-  GRAVITY: -58,
-  JUMP_V: 15.6,                  // ~1.9u apex, ~0.72s airtime at this gravity
+  /* Jump apex is unchanged from the original tuning at ~2.1u — it still
+   * clears a car and still cannot clear a van, so nothing about what he can
+   * get over has moved. Both numbers went up together to cut the hang time
+   * from 0.54s to 0.46s: same height, less float, and the press reads as a
+   * snap rather than a drift. (The comment these replaced claimed 1.9u and
+   * 0.72s, which was never what the constants did.)
+   */
+  GRAVITY: -79,
+  JUMP_V: 18.2,                  // 2.10u apex, 0.46s airtime at this gravity
   SLIDE_TIME: 0.6,
+
+  // ---- Run cycle ----------------------------------------------------------
+  /* Cadence is derived from ground speed, on an eased curve so it keeps
+   * responding across the whole ramp instead of pinning at one end.
+   *
+   * It is deliberately NOT solved for zero foot-skate. He is about 2.4u tall
+   * with a 0.72u leg, and the track moves at 13-33 u/s — call it 35-90 km/h
+   * at his scale. A planted foot can only sweep about 1.2u relative to the
+   * hip, so matching ground speed exactly would need 8-20 steps a second,
+   * which is a hummingbird, not a man. Every runner in this genre has the
+   * same problem and the same answer: pick the cadence that reads as running
+   * and let the contact patch cheat. What the eye actually objects to is a
+   * missing bob and a locked spine, which is what the rest of this block is.
+   */
+  CADENCE_MIN: 3.4,              // steps/sec at SPEED_START
+  CADENCE_MAX: 5.6,              // steps/sec at SPEED_MAX
+  CADENCE_CURVE: 0.65,           // <1 front-loads the gain, like the speed ramp
+  STANCE_FRAC: 0.35,             // share of the cycle a foot is planted; the
+                                 // rest is flight, and it is what the bob rides
+  THIGH_AMP: 0.70,               // radians of hip swing each way
+  THIGH_BIAS: 0.06,
+  ARM_AMP: 0.80,
+  ARM_BIAS: -0.15,
+  ARM_TUCK: 0.06,                // elbows held in toward the midline; much
+                                 // more than this and the fists clip his ribs
+  // Vertical travel of the whole body over one step. Applied analytically,
+  // never through a damp — see the note in CLAUDE.md.
+  BOB_AMOUNT: 0.155,
+  HIP_SWING: 0.30,               // radians the pelvis yaws each way
+  SHOULDER_SWING: 0.38,          // chest counter-yaw; larger, so it reads
+  LEAN_BASE: 0.10,               // forward pitch at SPEED_START
+  LEAN_SPEED: 0.16,              // extra pitch by SPEED_MAX
+  LEAN_MENACE: 0.13,             // extra pitch as the clippers close
+  LAND_SQUASH: 0.30,             // how far he sinks on a full-speed landing
+  LAND_TIME: 0.22,               // seconds to absorb a landing
+  LANE_BANK: 0.012,              // roll per unit/sec of lateral velocity
   // How often he glances back at the clippers: seconds facing forward, then
   // seconds looking over his shoulder, on a loop.
   LOOK_FORWARD: 2.0,
@@ -98,6 +141,9 @@ PP.CFG = {
   FRAME_HALF_WIDTH: 5.4,         // world half-extent that must stay in frame
   CULL_BEHIND: 12,               // recycle once it's safely past the camera
   FOV_MENACE: 9,                 // extra FOV punched in as the clippers close
+  FOV_SPEED: 7,                  // extra FOV by SPEED_MAX, so speed is felt
+  CAM_BACK_SPEED: 1.6,           // extra dolly-back by SPEED_MAX
+  CAM_LAND_DIP: 0.55,            // camera drop on a full-speed landing
   SHAKE_DECAY: 4.5,
 
   // ---- Ink / comic palette (pulled from the character reference) ----------

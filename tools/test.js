@@ -90,7 +90,12 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   await page.keyboard.press('w'); await sleep(200);
   const wy = await page.evaluate(() => window.__PP_DEBUG.playerY());
   ok(wy > 0.3, 'W jumps (y=' + wy + ')');
-  await sleep(900);
+  /* Wait for the landing rather than sleeping a fixed time. Under the
+   * software renderer the frame rate is low and dt is clamped, so game time
+   * runs slower than wall time — a fixed sleep here was within one frame of
+   * failing, and a jump-tuning change duly tipped it over. */
+  await page.waitForFunction('window.__PP_DEBUG.airborne() === false', { timeout: 5000 });
+  await sleep(120);
 
   await page.keyboard.press('s'); await sleep(150);
   ok((await page.evaluate(() => window.__PP_DEBUG.sliding())) === true, 'S slides');
@@ -268,6 +273,108 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   ok(mRun.metres > 5, 'mobile run advances (' + mRun.metres + 'm)');
   await sleep(2500);
   await mp.screenshot({ path: `${SHOTS}/06-mobile-run.png` });
+
+
+  console.log('\n=== RUN CYCLE ===');
+  /* The cycle is periodic maths applied every frame, so it is one of the few
+   * visual things that CAN be asserted. Each of these corresponds to a real
+   * bug the rebuild fixed — leave them in.
+   */
+  await page.evaluate('window.__PP_DEBUG.start()');
+  await sleep(600);
+
+  // Sample a couple of stride's worth of frames
+  const sample = async (frames) => page.evaluate(async (n) => {
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      out.push(window.__PP_DEBUG.rig());
+      await new Promise(r => requestAnimationFrame(r));
+    }
+    return out;
+  }, frames);
+
+  const slow = await sample(60);
+  const bobs = slow.map(f => f.bob);
+  const bobRange = Math.max(...bobs) - Math.min(...bobs);
+  /* The old bob was a 3-6Hz target pushed through a damp() that only
+   * responded at 14/s, which flattened it to almost nothing. A number this
+   * far from zero is the whole point. */
+  ok(bobRange > 0.04, 'body actually rises and falls while running (' + bobRange.toFixed(3) + 'u)');
+
+  const hip = slow.map(f => f.hipYaw), chest = slow.map(f => f.chestYaw);
+  const hipRange = Math.max(...hip) - Math.min(...hip);
+  ok(hipRange > 0.2, 'hips rotate through the cycle (' + hipRange.toFixed(3) + ' rad)');
+  // Contralateral: when the hips yaw one way the shoulders must go the other
+  const opposed = slow.filter(f => Math.abs(f.hipYaw) > 0.05)
+    .every(f => Math.sign(f.hipYaw) === -Math.sign(f.chestYaw));
+  ok(opposed, 'shoulders counter-rotate against the hips');
+
+  /* Legs stay half a cycle apart. They legitimately cross — there is a
+   * moment mid-run where both thighs pass vertical together — so the check
+   * is that they are never both driven forward, and that they do separate. */
+  const bothForward = slow.some(f => f.thigh[0] > 0.3 && f.thigh[1] > 0.3);
+  const separate = slow.some(f => Math.abs(f.thigh[0] - f.thigh[1]) > 0.9);
+  ok(!bothForward && separate, 'legs stay out of phase with each other');
+
+  // Ankles articulate rather than riding rigid on the shin
+  const ankles = slow.flatMap(f => f.ankle);
+  ok(Math.max(...ankles) - Math.min(...ankles) > 0.2, 'ankles flex through the cycle');
+
+  // Cadence has to keep responding all the way up the speed ramp
+  const slowCad = slow[0].cadence;
+  await page.evaluate('window.__PP_DEBUG.setSpeed(33)');
+  await sleep(200);
+  const fast = await sample(30);
+  const fastCad = fast[0].cadence;
+  ok(fastCad > slowCad + 0.5,
+    'cadence rises with speed (' + slowCad.toFixed(2) + ' -> ' + fastCad.toFixed(2) + ' steps/s)');
+  const fastBobs = fast.map(f => f.bob);
+  ok(Math.max(...fastBobs) - Math.min(...fastBobs) > 0.04, 'bob survives at top speed too');
+  ok(fast[0].lean > slow[0].lean, 'he leans in further at speed');
+
+  console.log('\n=== INPUT ===');
+  await page.evaluate('window.__PP_DEBUG.start()');
+  await sleep(500);
+
+  /* Held keys must not auto-fire. The browser's own key-repeat used to be
+   * wired straight into moveLane, so leaning on a direction walked him across
+   * every lane and leaning on jump re-launched him on every landing frame. */
+  const laneStart = await page.evaluate('window.__PP_DEBUG.lane()');
+  await page.keyboard.down('a');
+  await sleep(900);
+  await page.keyboard.up('a');
+  await sleep(250);
+  const laneHeld = await page.evaluate('window.__PP_DEBUG.lane()');
+  ok(laneStart - laneHeld === 1,
+    'holding a direction moves exactly one lane (' + laneStart + ' -> ' + laneHeld + ')');
+
+  /* No free double jump. The coyote-time check used to read airT, which is
+   * zero at the instant of take-off, so a second press inside the window
+   * re-set vy and bought another 2.4 units of height. */
+  await page.keyboard.press('Space');
+  await sleep(50);
+  const vyFirst = await page.evaluate('window.__PP_DEBUG.vy()');
+  await page.keyboard.press('Space');
+  await sleep(30);
+  const vySecond = await page.evaluate('window.__PP_DEBUG.vy()');
+  ok(vySecond < vyFirst,
+    'a second jump press mid-air does not re-launch him (' + vyFirst + ' -> ' + vySecond + ')');
+
+  /* Landing has to leave something behind to animate with. The impact
+   * velocity is zeroed by the ground clamp one line after it is read, so if
+   * it isn't captured there is literally nothing to drive a landing off. */
+  await sleep(700);
+  await page.keyboard.press('Space');
+  const landTrace = await page.evaluate(async () => {
+    const out = [];
+    for (let i = 0; i < 90; i++) {
+      out.push(window.__PP_DEBUG.rig().landT);
+      await new Promise(r => requestAnimationFrame(r));
+    }
+    return out;
+  });
+  ok(Math.max(...landTrace) > 0.05,
+    'landing registers an impact to absorb (' + Math.max(...landTrace).toFixed(3) + 's)');
 
   console.log('\n=== FILE:// (no server) ===');
   /* The artwork is baked in as data URIs specifically so the game keeps

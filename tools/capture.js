@@ -61,6 +61,72 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   console.log('turn-{front,front34,side,back}.png');
   await p.close();
 
+  /* --- Stride strips -----------------------------------------------------
+   *
+   * A run cycle cannot be judged from one frame. These walk the whole cycle
+   * at eight even phases, from the side (where the leg and arm swing read)
+   * and from three-quarter behind (the angle actually played). Two speeds,
+   * because cadence and lean both move with it.
+   */
+  for (const [speed, tag] of [[13, 'slow'], [33, 'fast']]) {
+    for (const [angle, view] of [[90, 'side'], [35, 'back34']]) {
+      p = await open(340, 460, 2);
+      await p.keyboard.press('Space');
+      await sleep(1200);
+      await p.evaluate(() => {
+        window.__PP_DEBUG.hideWorld();
+        document.getElementById('hud').style.display = 'none';
+      });
+      for (let i = 0; i < 8; i++) {
+        await p.evaluate(([a, u, sp]) => {
+          window.__PP_DEBUG.poseCam(a, 6.8, 1.8, 1.25);
+          window.__PP_DEBUG.stridePose(u, sp);
+        }, [angle, i / 8, speed]);
+        await sleep(160);
+        await p.screenshot({ path: `${SHOTS}/stride-${tag}-${view}-${i}.png` });
+      }
+      await p.close();
+    }
+  }
+  console.log('stride-{slow,fast}-{side,back34}-0..7.png');
+
+  /* --- Landing sequence ---------------------------------------------------
+   *
+   * Deliberately NOT poseCam'd: freezing the camera also pauses the game, and
+   * a landing has to actually happen. The world stays visible because the
+   * ground is the reference you are judging the squash against; the chase
+   * camera is just pulled in close so he is big enough to read.
+   */
+  p = await open(420, 460, 2);
+  await p.keyboard.press('Space');
+  await sleep(1200);
+  await p.evaluate(() => {
+    PP.CFG.CAM_BACK = 5.0;
+    PP.CFG.CAM_HEIGHT = 2.6;
+    PP.CFG.CAM_LOOK_AHEAD = 5;
+    document.getElementById('hud').style.display = 'none';
+  });
+  await sleep(700);
+  await p.keyboard.press('Space');
+  for (let i = 0; i < 10; i++) {
+    await sleep(70);
+    await p.screenshot({ path: `${SHOTS}/land-${i}.png` });
+  }
+  console.log('land-0..9.png');
+  await p.close();
+
+  // --- In-game, at the speeds actually played -----------------------------
+  for (const [speed, tag] of [[13, 'start'], [24, 'mid'], [33, 'max']]) {
+    p = await open(900, 560);
+    await p.keyboard.press('Space');
+    await sleep(2500);
+    await p.evaluate((sp) => window.__PP_DEBUG.setSpeed(sp), speed);
+    await sleep(900);
+    await p.screenshot({ path: `${SHOTS}/play-${tag}.png` });
+    await p.close();
+  }
+  console.log('play-{start,mid,max}.png');
+
   // --- Hair stages -------------------------------------------------------
   p = await open(520, 520);
   await p.keyboard.press('Space');

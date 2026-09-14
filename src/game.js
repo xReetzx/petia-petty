@@ -13,7 +13,11 @@ window.PP = window.PP || {};
     runTime: 0,
     best: PP.U.store.get('pp.best', 0),
     shake: 0,
+    // The un-shaken camera position. Shake is layered on top of this so it
+    // never feeds back into its own smoothing.
+    camBase: { x: 0, y: PP.CFG.CAM_HEIGHT, z: PP.CFG.CAM_BACK },
     freezeCam: false,
+    freezePose: false,
     baseFov: PP.CFG.FOV_BASE,
     lastT: 0,
     raf: 0
@@ -21,7 +25,7 @@ window.PP = window.PP || {};
 
   let renderer, scene, camera, player, clippers, world;
   let container, hitFlash;
-  const buffered = { jump: 0, slide: 0 };
+  const buffered = { jump: 0, slide: 0, lane: 0, laneDir: 0 };
 
   /* ---------------------------------------------------------------- setup */
   function init() {
@@ -103,12 +107,29 @@ window.PP = window.PP || {};
   }
 
   /* ---------------------------------------------------------------- input */
+  // Buffered lane change: fires now if it can, otherwise keeps trying for
+  // INPUT_BUFFER seconds. `moveLane` refuses only at the outer lanes, so a
+  // queued press survives the tail of a swap that is still finishing.
+  function queueLane(dir) {
+    if (player.moveLane(dir)) { PP.Audio.sfx.lane(); buffered.lane = 0; return; }
+    buffered.lane = PP.CFG.INPUT_BUFFER;
+    buffered.laneDir = dir;
+  }
+
   function bindInput() {
     window.addEventListener('keydown', (e) => {
       const k = e.key.toLowerCase();
       if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'spacebar'].includes(k)) {
         e.preventDefault();
       }
+      /* One press, one action.
+       *
+       * Without this, the OS key-repeat that exists to type "aaaaaa" is
+       * wired straight into the controls: holding a direction walks him
+       * across every lane, and holding jump re-arms the buffer ~30 times a
+       * second so he re-launches on the frame he lands, forever.
+       */
+      if (e.repeat) return;
       if (k === 'm') { toggleMute(); return; }
       if (k === 'escape' || k === 'p') { togglePause(); return; }
 
@@ -116,8 +137,10 @@ window.PP = window.PP || {};
       if (G.state === S.OVER) { if (k === ' ' || k === 'enter' || k === 'r') startRun(); return; }
       if (G.state !== S.PLAY) return;
 
-      if (k === 'arrowleft' || k === 'a') { if (player.moveLane(-1)) PP.Audio.sfx.lane(); }
-      else if (k === 'arrowright' || k === 'd') { if (player.moveLane(1)) PP.Audio.sfx.lane(); }
+      // Lane presses go through the same buffer as jump and slide, so a dodge
+      // entered a frame early isn't simply dropped.
+      if (k === 'arrowleft' || k === 'a') { queueLane(-1); }
+      else if (k === 'arrowright' || k === 'd') { queueLane(1); }
       else if (k === 'arrowup' || k === 'w' || k === ' ') { buffered.jump = PP.CFG.INPUT_BUFFER; }
       else if (k === 'arrowdown' || k === 's') { buffered.slide = PP.CFG.INPUT_BUFFER; }
     });
@@ -247,10 +270,15 @@ window.PP = window.PP || {};
   }
 
   /* ------------------------------------------------------------ collision */
-  function overlaps(pc, ob) {
+  function overlaps(pc, ob, travel) {
     const ud = ob.userData;
     const dz = Math.abs(ob.position.z);
-    if (dz > 1.1) return false;                       // not at the player yet
+    /* The Z test has to cover the ground the obstacle crossed this frame,
+     * not just where it happens to sit now. A fixed +-1.1 window was exactly
+     * one frame of travel at SPEED_MAX with dt clamped to 1/30, so the test
+     * sat right on the edge of missing an obstacle entirely between frames.
+     */
+    if (dz > 1.1 + travel * 0.5) return false;        // not at the player yet
     if (Math.abs(pc.x - ob.position.x) > ud.halfW + pc.r * 0.6) return false;
     // Vertical: does the player's current pose intersect the obstacle band?
     return pc.yMin < ud.yMax && pc.yMax > ud.yMin;
@@ -258,10 +286,11 @@ window.PP = window.PP || {};
 
   function checkCollisions(dt) {
     const pc = player.collider();
+    const travel = G.speed * dt;
 
     for (const ob of world.obstacles) {
       if (ob.userData.hitDone) continue;
-      if (overlaps(pc, ob)) {
+      if (overlaps(pc, ob, travel)) {
         ob.userData.hitDone = true;
         onObstacleHit();
       }
@@ -371,6 +400,7 @@ window.PP = window.PP || {};
 
   // Title / pause / game-over: keep the scene gently alive
   function idle(dt) {
+    if (G.freezePose) return;                  // held mid-stride for a capture
     if (G.freezeCam) { player.update(dt, 0); return; }
     clippers.update(dt, 0, 0);
     world.update(dt * 3.5, 0, 4);
@@ -404,8 +434,12 @@ window.PP = window.PP || {};
       buffered.slide -= dt;
       if (player.grounded && player.slide()) { buffered.slide = 0; PP.Audio.sfx.slide(); }
     }
+    if (buffered.lane > 0) {
+      buffered.lane -= dt;
+      if (player.moveLane(buffered.laneDir)) { buffered.lane = 0; PP.Audio.sfx.lane(); }
+    }
 
-    player.update(dt, G.speed);
+    player.update(dt, G.speed, clippers.menace);
     world.update(dz, G.metres, G.speed);
     checkCollisions(dt);
 
@@ -425,24 +459,37 @@ window.PP = window.PP || {};
 
   function updateCamera(dt) {
     const cfg = PP.CFG, U = PP.U;
+    const sN = U.clamp(
+      (G.speed - cfg.SPEED_START) / (cfg.SPEED_MAX - cfg.SPEED_START), 0, 1);
 
     // Camera trails the player laterally rather than locking to him — makes
     // lane changes feel like movement instead of the world sliding. On narrow
     // screens it follows more closely so he stays comfortably in frame.
     const follow = camera.aspect < 1 ? 0.78 : 0.52;
-    const camX = U.damp(camera.position.x, player.x * follow, 6, dt);
-    const camY = U.damp(
-      camera.position.y,
-      cfg.CAM_HEIGHT + player.y * 0.3 + (player.sliding ? -0.3 : 0),
+
+    /* The smoothed follow position is tracked separately from what the
+     * camera is actually set to. Damping from camera.position would be
+     * damping from a value that already has this frame's random shake
+     * baked into it, which quietly turns a shake into a drift.
+     */
+    G.camBase.x = U.damp(G.camBase.x, player.x * follow, 6, dt);
+    // Dip on landing, so an impact is felt and not just seen
+    const landDip = player.landT > 0
+      ? (player.landT / cfg.LAND_TIME) * player.landImpact * cfg.CAM_LAND_DIP : 0;
+    G.camBase.y = U.damp(
+      G.camBase.y,
+      cfg.CAM_HEIGHT + player.y * 0.3 + (player.sliding ? -0.3 : 0) - landDip,
       7, dt
     );
+    // Pull back a touch at speed so the frame opens up as the run gets fast
+    G.camBase.z = U.damp(G.camBase.z, cfg.CAM_BACK + sN * cfg.CAM_BACK_SPEED, 3, dt);
 
     if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * cfg.SHAKE_DECAY);
     const s = G.shake * G.shake;
     camera.position.set(
-      camX + (Math.random() - 0.5) * s * 0.85,
-      camY + (Math.random() - 0.5) * s * 0.85,
-      cfg.CAM_BACK
+      G.camBase.x + (Math.random() - 0.5) * s * 0.85,
+      G.camBase.y + (Math.random() - 0.5) * s * 0.85,
+      G.camBase.z
     );
     // Aim down the street he's running into.
     camera.lookAt(
@@ -451,8 +498,14 @@ window.PP = window.PP || {};
       -cfg.CAM_LOOK_AHEAD
     );
 
-    // FOV punches in as the clippers close — the walls feel like they narrow
-    const fov = G.baseFov + U.easeOutCubic(clippers.menace) * cfg.FOV_MENACE;
+    /* FOV widens with speed and punches in as the clippers close. Speed used
+     * to change nothing at all here — he could be going two and a half times
+     * as fast as he started and the lens never acknowledged it, which is a
+     * large part of why the run stopped feeling fast well before it stopped
+     * getting faster.
+     */
+    const fov = G.baseFov + sN * cfg.FOV_SPEED
+      + U.easeOutCubic(clippers.menace) * cfg.FOV_MENACE;
     if (Math.abs(camera.fov - fov) > 0.05) {
       camera.fov = U.damp(camera.fov, fov, 4, dt);
       camera.updateProjectionMatrix();
@@ -474,6 +527,14 @@ window.PP = window.PP || {};
     giveShield: () => player.giveShield(),
     givePickup: (k) => onPickup(k),
     setMenace: (m) => { clippers.menace = m; },
+    // Jump the speed ramp to a given speed, and move runTime with it so the
+    // ramp target doesn't simply damp it straight back down again.
+    setSpeed: (v) => {
+      const cfg = PP.CFG;
+      const y = PP.U.clamp((v - cfg.SPEED_START) / (cfg.SPEED_MAX - cfg.SPEED_START), 0, 1);
+      G.runTime = (1 - Math.cbrt(1 - y)) * cfg.SPEED_RAMP_TIME;
+      G.speed = v;
+    },
     kill: () => { player.invuln = 0; player.setHair(1); onSnipped(); },
     lane: () => player.targetLane,
     playerY: () => +player.y.toFixed(3),
@@ -482,7 +543,35 @@ window.PP = window.PP || {};
     character: () => PP.Characters.id,
     pickCharacter: (id) => pickCharacter(id),
     rosterCount: () => document.querySelectorAll('.char-card').length,
-    headYaw: () => +player.head.rotation.y.toFixed(3),
+    /* World-space head yaw. The head's own rotation cancels the run's
+     * shoulder twist, so reading it alone would report the cancellation
+     * rather than where he is actually looking. */
+    headYaw: () => +(player.head.rotation.y + player.chest.rotation.y).toFixed(3),
+    /* Run-cycle probes. Feel bugs are silent — every one of them passed the
+     * whole suite while broken — so the parts of the cycle that can be
+     * measured, are.
+     */
+    rig: () => ({
+      bob: +player.body.position.y.toFixed(4),
+      hipYaw: +player.pelvis.rotation.y.toFixed(4),
+      // The look-back twist rides on the same group, so subtract it out to
+      // read the run's own counter-rotation.
+      chestYaw: +(player.chest.rotation.y - (player.twist || 0)).toFixed(4),
+      cadence: +(player.cadence || 0).toFixed(3),
+      lean: +player.body.rotation.x.toFixed(4),
+      thigh: player.legs.map((l) => +l.pivot.rotation.x.toFixed(4)),
+      ankle: player.legs.map((l) => +l.foot.rotation.x.toFixed(4)),
+      landT: +player.landT.toFixed(4)
+    }),
+    // World-space Y of each foot, for checking ground contact
+    feetY: () => player.legs.map((l) => {
+      const v = new THREE.Vector3();
+      l.foot.updateWorldMatrix(true, false);
+      v.setFromMatrixPosition(l.foot.matrixWorld);
+      return +v.y.toFixed(3);
+    }),
+    vy: () => +player.vy.toFixed(3),
+    airborne: () => !player.grounded,
     /* Horizontal gap between the clippers and the player in normalised screen
      * space. The whole point of hunting from the side is that this stays
      * positive, so the harness checks it rather than trusting the geometry. */
@@ -502,6 +591,28 @@ window.PP = window.PP || {};
       camera.lookAt(0, lookY, 0);
       camera.fov = 30;
       camera.updateProjectionMatrix();
+    },
+    /* Hold him at an exact point in the stride so a capture can walk the
+     * whole cycle frame by frame. A run cycle cannot be reviewed from a
+     * single still — you need the strip — and the game will not sit still
+     * on its own.
+     *
+     * Settle the damped values first, then set the phase and animate with
+     * dt = 0: damp() is a no-op at zero dt, so everything periodic snaps to
+     * the requested phase while everything smoothed stays where it settled.
+     */
+    stridePose: (u, speed) => {
+      G.state = S.PAUSE;
+      G.freezeCam = true;
+      G.freezePose = true;
+      player.grounded = true; player.sliding = false;
+      player.x = 0; player.y = 0; player.vy = 0; player.landT = 0;
+      player.lookT = 0; player.twist = 0; player.stumble = 0;
+      player.head.rotation.set(0, 0, 0);
+      for (let i = 0; i < 40; i++) player._animate(1 / 60, speed, 0);
+      player.runPhase = u * Math.PI * 2;
+      player._animate(0, speed, 0);
+      player.root.position.set(0, 0, 0);
     },
     // Freeze the nervous glance, so a turnaround shows him square rather than
     // catching him mid-look-back

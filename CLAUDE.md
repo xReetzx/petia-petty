@@ -80,6 +80,41 @@ without re-deriving the constraint:
 menace and asserts the horizontal gap stays positive, so this cannot silently
 regress.
 
+### The rig splits at the waist, and the cycle is never damped
+
+`player.js` builds `body → { pelvis, chest }`, with the legs on the pelvis and
+the torso, arms and head on the chest. That exists for one reason: a run reads
+as a run because the hips and shoulders rotate *against* each other. With the
+limbs on a single group that is impossible to express and the result is a
+wind-up toy marching. Don't flatten the hierarchy.
+
+The head is a child of `chest`, so `_animate` **cancels the chest's run twist
+out of `head.rotation.y`**. A runner's shoulders turn under a head that stays
+pointed where he is going; without the cancellation his face swings twenty
+degrees each way, every step.
+
+**Never wrap a periodic value in `damp()`.** The cycle runs at 3–6 Hz and no
+sane damping rate can follow that — the filter silently flattens it and
+phase-lags what is left. The old body bob was a correct-looking
+`damp(y, |sin(p)| * 0.07, 14, dt)` that produced almost no visible motion at
+all, and a character with no vertical travel is the single loudest thing wrong
+with a run. Write anything periodic analytically and assign it directly;
+`damp()` is for transitions *between* states (lean, pose changes, the camera).
+
+Two more things the rebuild depends on:
+
+- **Impact velocity has to be captured in `update()` before the ground clamp**,
+  which zeroes `vy` one line later. Miss it and a landing frame is
+  arithmetically identical to any other grounded frame, leaving nothing to
+  animate a landing with.
+- **Lane bank is driven by lateral velocity, not distance remaining.** Driving
+  it from the gap left to close makes the lean peak *after* he has arrived.
+
+Cadence is derived from ground speed but is deliberately **not** solved for
+zero foot-skate — see the note in `config.js`. His legs are far too short for
+the speed the track moves at; matching it exactly would need eight to twenty
+steps a second.
+
 ### Hair is the health bar
 
 `PP.Player.setHair(n)` swaps geometry for stage `n`: full mop → clipped back to
