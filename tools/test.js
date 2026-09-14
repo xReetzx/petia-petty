@@ -269,6 +269,31 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   await sleep(2500);
   await mp.screenshot({ path: `${SHOTS}/06-mobile-run.png` });
 
+  console.log('\n=== FILE:// (no server) ===');
+  /* The artwork is baked in as data URIs specifically so the game keeps
+   * working when opened straight off disk — a file:// page treats every file
+   * as its own origin, so a fetched image would taint the canvases the
+   * portrait card draws on. This check is what stops that regressing. */
+  {
+    const fp = await browser.newPage({ viewport: { width: 900, height: 600 } });
+    const fpErr = [];
+    fp.on('pageerror', (e) => fpErr.push(e.message));
+    fp.on('console', (m) => { if (m.type() === 'error') fpErr.push('console: ' + m.text()); });
+    const fileUrl = 'file://' + path.resolve(__dirname, '../index.html');
+    await fp.goto(fileUrl, { waitUntil: 'load' });
+    const booted = await fp.waitForFunction('window.__PP_READY === true', { timeout: 20000 })
+      .then(() => true).catch(() => false);
+    await sleep(2000);
+    ok(booted, 'boots with no server, straight off disk');
+    ok(fpErr.length === 0, 'no errors from file://' + (fpErr.length ? ': ' + fpErr.slice(0, 2).join(' | ') : ''));
+    ok(await fp.evaluate(() => !!document.querySelector('.char-card canvas')),
+       'character card still renders from file://');
+    await fp.keyboard.press('Space');
+    await sleep(1500);
+    ok((await fp.evaluate(() => window.__PP_DEBUG.stats().state)) === 'play', 'and plays from file://');
+    await fp.close();
+  }
+
   console.log('\n=== ERROR TOTALS ===');
   ok(pageErrors.length === 0, 'zero uncaught errors across whole session');
 

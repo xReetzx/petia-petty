@@ -503,6 +503,9 @@ window.PP = window.PP || {};
       camera.fov = 30;
       camera.updateProjectionMatrix();
     },
+    // Freeze the nervous glance, so a turnaround shows him square rather than
+    // catching him mid-look-back
+    faceForward: () => { player.lookT = 0; player.head.rotation.set(0, 0, 0); player.twist = 0; },
     hideWorld: () => {
       scene.traverse((o) => {
         if (o.isMesh && !player.root.getObjectById(o.id)) o.visible = false;

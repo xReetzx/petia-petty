@@ -576,9 +576,9 @@ PP.Face = (function () {
     // Hair down to just below the ears, with a ragged hairline
     ctx.fillStyle = hex(c.hair);
     ctx.beginPath();
-    ctx.moveTo(0, 0); ctx.lineTo(S, 0); ctx.lineTo(S, 300);
-    ctx.quadraticCurveTo(384, 356, 256, 344);
-    ctx.quadraticCurveTo(128, 356, 0, 300);
+    ctx.moveTo(0, 0); ctx.lineTo(S, 0); ctx.lineTo(S, 418);
+    ctx.quadraticCurveTo(384, 462, 256, 452);
+    ctx.quadraticCurveTo(128, 462, 0, 418);
     ctx.closePath();
     ctx.fill();
 
@@ -587,7 +587,7 @@ PP.Face = (function () {
     for (let i = 0; i < 220; i++) {
       const x = Math.random() * S;
       const t = x / S;
-      const edge = 300 + Math.sin(t * Math.PI) * 46;
+      const edge = 418 + Math.sin(t * Math.PI) * 42;
       ctx.lineWidth = 2 + Math.random() * 2.4;
       ctx.beginPath();
       ctx.moveTo(x, edge - 14 - Math.random() * 20);
@@ -638,8 +638,95 @@ PP.Face = (function () {
     return tex;
   }
 
+
+  /* ---- The artwork ------------------------------------------------------
+   * His face is the reference illustration itself, not a drawing of it.
+   * PP.Art holds it as data URIs baked by tools/bake-art.py — see that file
+   * for why it is embedded rather than loaded.
+   *
+   * The drawn face below is kept as a fallback: if the image fails to decode
+   * for any reason the game still has a face to put on him, and the locked
+   * roster slots have no artwork of their own.
+   */
+  let artCanvas = null, artTex = null, artStarted = false;
+
+  /* Hand back ONE texture object immediately and fill it in when the image
+   * decodes.
+   *
+   * Decoding is asynchronous, so returning the artwork only once it is ready
+   * means the material is built from the drawn fallback and never swapped —
+   * which is exactly what happened on the first attempt. Instead the canvas
+   * and its texture are created up front, seeded with the drawn face so there
+   * is never a blank frame, and the image is painted into that same canvas
+   * later with `needsUpdate`. The material holds one texture throughout and
+   * does not care that its pixels changed.
+   */
+  function artTexture(mode) {
+    if (!artCanvas) {
+      artCanvas = document.createElement('canvas');
+      artCanvas.width = artCanvas.height = S;
+      const seed = build(mode || 'panic');
+      artCanvas.getContext('2d').drawImage(seed.image, 0, 0);
+      seed.dispose();
+      artTex = new THREE.CanvasTexture(artCanvas);
+      artTex.anisotropy = 4;
+    }
+    if (!artStarted && window.PP && PP.Art && PP.Art.face) {
+      artStarted = true;
+      const img = new Image();
+      img.onload = () => {
+        const ctx = artCanvas.getContext('2d');
+        ctx.clearRect(0, 0, S, S);
+        ctx.drawImage(img, 0, 0, S, S);
+        artTex.needsUpdate = true;
+      };
+      // No handler needed on failure: the canvas already holds the drawn face.
+      img.src = PP.Art.face;
+    }
+    return artTex;
+  }
+
+
+  /* The same deferred-decode trick for any other baked crop: build the canvas
+   * and its texture now, seed it with a drawn fallback, paint the image in
+   * when it decodes. One texture object throughout, so materials built before
+   * the image arrives still end up showing it. */
+  function bakedTexture(key, size, seedFn) {
+    const store = bakedTexture._cache || (bakedTexture._cache = {});
+    if (store[key]) return store[key].tex;
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = size;
+    if (seedFn) {
+      const seed = seedFn();
+      cv.getContext('2d').drawImage(seed.image, 0, 0, size, size);
+      seed.dispose();
+    }
+    const tex = new THREE.CanvasTexture(cv);
+    tex.anisotropy = 4;
+    store[key] = { tex, cv };
+    const uri = window.PP && PP.Art && PP.Art[key];
+    if (uri) {
+      const img = new Image();
+      img.onload = () => {
+        const ctx = cv.getContext('2d');
+        ctx.clearRect(0, 0, size, size);
+        ctx.drawImage(img, 0, 0, size, size);
+        tex.needsUpdate = true;
+      };
+      img.src = uri;
+    }
+    return tex;
+  }
+
   const cache = {};
   function get(mode) {
+    // One texture for every mode: the illustration has a single expression,
+    // and it is his likeness that matters rather than a panic variant.
+    return artTexture(mode || 'panic');
+  }
+
+  /** The drawn face, bypassing the artwork — used by the fallback portrait. */
+  function drawn(mode) {
     mode = mode || 'panic';
     if (!cache[mode]) cache[mode] = build(mode);
     return cache[mode];
@@ -654,6 +741,30 @@ PP.Face = (function () {
    * player gets a proper look at him.
    */
   function portrait(character, size) {
+    // Petty's card is the illustration itself. Everything below is the drawn
+    // fallback, still used for any character without artwork.
+    if (character && character.art !== false && window.PP && PP.Art && PP.Art.cover) {
+      const P_ = size || 320;
+      const cv = document.createElement('canvas');
+      cv.width = P_; cv.height = P_;
+      const ctx = cv.getContext('2d');
+      ctx.fillStyle = hex(C().paper);
+      ctx.fillRect(0, 0, P_, P_);
+      const img = new Image();
+      img.onload = () => {
+        // Fill the square on his head and shoulders
+        const sw = img.width, sh = img.height;
+        const cropH = sw * 1.02;
+        const sy = Math.max(0, sh * 0.05);
+        ctx.drawImage(img, 0, sy, sw, Math.min(cropH, sh - sy), 0, 0, P_, P_);
+      };
+      img.src = PP.Art.cover;
+      return cv;
+    }
+    return portraitDrawn(character, size);
+  }
+
+  function portraitDrawn(character, size) {
     const P_ = size || 320;
     const cv = document.createElement('canvas');
     cv.width = P_; cv.height = P_;
@@ -774,9 +885,12 @@ PP.Face = (function () {
   }
 
   const sideCache = {}, backCache = {}, underCache = {};
-  const side = () => (sideCache.t || (sideCache.t = sideTexture()));
+  // His ear, jaw and beard in profile come out of the illustration itself —
+  // the painted version sat lighter and flatter than the artwork on the front
+  // and the seam at the box edge showed.
+  const side = () => bakedTexture('side', 384, sideTexture);
   const back = () => (backCache.t || (backCache.t = backTexture()));
   const under = () => (underCache.t || (underCache.t = underTexture()));
 
-  return { get, build, side, back, under, portrait, portraitLocked, PATCHES };
+  return { get, drawn, build, side, back, under, portrait, portraitLocked, PATCHES };
 })();

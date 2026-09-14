@@ -47,10 +47,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(1500);
   await p.evaluate(() => {
     window.__PP_DEBUG.hideWorld();
+    window.__PP_DEBUG.faceForward();
     document.getElementById('hud').style.display = 'none';
   });
   for (const [angle, name] of [[180, 'front'], [135, 'front34'], [90, 'side'], [0, 'back']]) {
-    await p.evaluate((a) => window.__PP_DEBUG.poseCam(a, 6.4, 1.7, 1.35), angle);
+    await p.evaluate((a) => {
+      window.__PP_DEBUG.faceForward();
+      window.__PP_DEBUG.poseCam(a, 6.4, 1.75, 1.4);
+    }, angle);
     await sleep(450);
     await p.screenshot({ path: `${SHOTS}/turn-${name}.png` });
   }

@@ -27,7 +27,11 @@ PP.UI = (function () {
      'screenTitle', 'screenPause', 'screenOver',
      'bestTitle', 'finalScore', 'finalDist', 'finalBest', 'deathLine',
      'toast', 'muteBtn', 'pauseBtn', 'newBest',
-     'roster', 'charName', 'charBlurb'].forEach((k) => { el[k] = $(k); });
+     'roster', 'charName', 'charBlurb', 'titleArt'].forEach((k) => { el[k] = $(k); });
+
+    if (el.titleArt && window.PP && PP.Art && PP.Art.cover) {
+      el.titleArt.style.backgroundImage = 'url(' + PP.Art.cover + ')';
+    }
   }
 
   function show(which) {

@@ -16,12 +16,15 @@ PP.Characters = (function () {
       tagline: 'Losing. Badly.',
       blurb: 'Beard like a hedge, hairline in full retreat.',
       locked: false,
+      // Sampled straight out of assets/petty-ref.jpg rather than guessed, so
+      // the body, the procedural side and back of the head, and the hair
+      // geometry all tone to the artwork on his face.
       colors: {
-        skin:    0xf2bd97,
-        hair:    0x2c1d18,
-        beard:   0x3a251c,
-        shirt:   0x7c2f42,
-        shirtDk: 0x5a1f2f,
+        skin:    0xe0a57e,
+        hair:    0x241c18,
+        beard:   0x53392d,
+        shirt:   0x67373c,
+        shirtDk: 0x4d272c,
         jeans:   0x2f3a4a,
         shoe:    0x24262b
       }

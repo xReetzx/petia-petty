@@ -148,6 +148,20 @@
   }
   .screen.on{display:flex;}
 
+  /* The illustration behind the title. It is the game's identity and was
+     appearing nowhere; kept faint so the logo and copy stay legible. */
+  .title-art{
+    position:absolute;inset:0;z-index:-1;pointer-events:none;
+    background-position:center 12%;
+    background-repeat:no-repeat;
+    background-size:min(74vh,560px) auto;
+    opacity:.16;
+    filter:saturate(.75);
+    -webkit-mask-image:radial-gradient(ellipse at 50% 30%, #000 30%, transparent 72%);
+    mask-image:radial-gradient(ellipse at 50% 30%, #000 30%, transparent 72%);
+  }
+  #screenTitle{position:relative;}
+
   .logo{
     font-size:clamp(44px,13vw,104px);font-weight:900;line-height:.82;
     letter-spacing:-2px;text-transform:uppercase;
@@ -326,6 +340,7 @@
 
 <!-- ------------------------------------------------------------- Title -->
 <div class="screen on" id="screenTitle">
+  <div class="title-art" id="titleArt" aria-hidden="true"></div>
   <h1 class="logo"><span>Petia</span><span class="two">Petty</span></h1>
   <p class="tagline">A giant pair of clippers wants your hairline. It already has a head start.</p>
   <p class="sub">Vault the cars, slide under the rigs, dodge the vans. Collect hair to score. Every hit lets them gain — and when they
@@ -380,6 +395,7 @@
 <script src="src/config.js"></script>
 <script src="src/utils.js"></script>
 <script src="src/audio.js"></script>
+<script src="src/art.js"></script>
 <script src="src/face.js"></script>
 <script src="src/characters.js"></script>
 <script src="src/player.js"></script>

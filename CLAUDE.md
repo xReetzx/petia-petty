@@ -91,6 +91,37 @@ Every hair and beard piece must stay **behind the face plane** (the head box is
 0.76 deep, so its front face is at local `z = -0.38`). Anything poking past that
 lands on his eyes.
 
+### His face is the real artwork, not a drawing of it
+
+`assets/petty-ref.jpg` is the reference illustration. `tools/bake-art.py` crops
+it — face, side profile, and the whole composition — and writes them into
+`src/art.js` as base64 data URIs. Re-run it after changing the artwork:
+
+```bash
+python3 tools/bake-art.py        # PREVIEW=/some/dir to also dump the crops
+```
+
+It is **baked in rather than loaded** for a specific reason: a `file://` page
+treats every file as its own origin, so an image fetched at runtime taints any
+canvas it is drawn into — and the portrait card does exactly that kind of
+canvas work. Embedding sidesteps loading altogether, which is also why the
+Artifact CSP is a non-issue. `npm test` has a `file://` section that guards
+this; if it starts failing, something reintroduced a runtime fetch.
+
+Two things follow from the artwork being a real image:
+
+- **Decoding is asynchronous**, so `PP.Face.get()` hands back one texture
+  object immediately, seeded with the drawn fallback, and paints the image into
+  that same canvas when it arrives (`needsUpdate`). Returning the artwork only
+  once ready means materials get built from the fallback and never swapped —
+  that was the first attempt, and his face silently stayed hand-drawn.
+- **Crop constants are in source-image pixel coordinates.** The source was
+  converted from a 8.8 MB PNG to a 0.83 MB JPEG at identical dimensions so they
+  still hold; do not resize it without rescaling them.
+
+The hand-drawn face in `src/face.js` is kept as the fallback and for roster
+slots with no artwork. `PP.Face.drawn()` reaches it directly.
+
 ### Two rendering constraints worth knowing
 
 - **Outlines are inverted hulls** — a back-faced copy of each mesh scaled

@@ -77,7 +77,14 @@ sitting on top of him. Only the lunge crosses over his head, which is the one
 moment occlusion is the point. There's a test for this: it projects both into
 screen space at full menace and asserts the horizontal gap stays positive.
 
-**The face is drawn, not modelled.** The camera looks him in the face for the
+**The face is the original artwork.** `assets/petty-ref.jpg` is cropped by
+`tools/bake-art.py` into `src/art.js` as data URIs and mapped onto the front and
+sides of the head, so his likeness is the illustration itself rather than an
+interpretation of it. It is embedded rather than fetched because a `file://`
+page taints any canvas a loaded image is drawn into, and the portrait card
+depends on that canvas work.
+
+**The fallback face is drawn, not modelled.** The camera looks him in the face for the
 whole run, so his likeness lives in a 512×512 canvas texture on the front of
 the head — brows, nose, beard, and the alopecia patches through the beard. The
 patches are punched through a separate beard layer with `destination-out` so

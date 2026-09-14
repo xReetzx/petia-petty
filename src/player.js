@@ -63,12 +63,14 @@ PP.Player = (function () {
 
     // --- Head -------------------------------------------------------------
     const head = new THREE.Group();
-    head.position.y = 1.97;
+    head.position.y = 2.02;
     body.add(head);
     this.head = head;
 
     // A touch wider than tall so it reads as a head rather than a slab.
-    const skullGeo = new THREE.BoxGeometry(0.9, 0.82, 0.76);
+    // Proportioned to the artwork crop in tools/bake-art.py, so his face
+    // maps onto the front of the head without being stretched.
+    const skullGeo = new THREE.BoxGeometry(0.88, 0.98, 0.74);
 
     // BoxGeometry material order is [+X, -X, +Y, -Y, +Z, -Z]. He runs toward
     // -Z, so -Z is his front. Every face gets its own drawn texture: a
@@ -76,12 +78,16 @@ PP.Player = (function () {
     // were bare skin slabs — and the chase camera looks at the back of his
     // head for the entire run, so that was the view that mattered most.
     const faceMat  = U_.toonMat(0xffffff, { map: PP.Face.get('panic') });
-    const sideMatL = U_.toonMat(0xffffff, { map: PP.Face.side() });
-    const sideMatR = U_.toonMat(0xffffff, { map: PP.Face.side() });
-    sideMatR.map = sideMatR.map.clone();
-    sideMatR.map.wrapS = THREE.RepeatWrapping;
-    sideMatR.map.repeat.x = -1;          // mirror, so both ears face forward
-    sideMatR.map.needsUpdate = true;
+    const sideTex = PP.Face.side();
+    const sideMatL = U_.toonMat(0xffffff, { map: sideTex });
+    // Mirror for the far side so the ear faces forward on both. The clone
+    // shares the same canvas image, so it picks up the artwork when it
+    // decodes just as the original does.
+    const mirrored = sideTex.clone();
+    mirrored.wrapS = THREE.RepeatWrapping;
+    mirrored.repeat.x = -1;
+    mirrored.needsUpdate = true;
+    const sideMatR = U_.toonMat(0xffffff, { map: mirrored });
     const backMat  = U_.toonMat(0xffffff, { map: PP.Face.back() });
     const underMat = U_.toonMat(0xffffff, { map: PP.Face.under() });
     const topMat   = U_.toonMat(c.hair);
@@ -101,78 +107,14 @@ PP.Player = (function () {
       head.add(ear);
     });
 
-    /* The beard as geometry rather than paint.
+    /* No 3D beard any more.
      *
-     * Painting it on the box faces meant the front's U-shape and the sides'
-     * band met at the corners without lining up, which is the thing that read
-     * most wrongly against the reference drawing.
-     *
-     * Built from overlapping closed spheres rather than a swept ring: an
-     * open-ended cylinder can't take the inverted-hull outline treatment —
-     * the hull renders its black interior and you get dark wedges through the
-     * head — and a cluster gives the chunky, ragged mass the ink drawing has
-     * anyway. It overlaps the painted beard on the face, which reads as the
-     * beard having volume rather than being a decal.
+     * The cluster of spheres here existed because the face was painted flat on
+     * one side of a box and needed framing. His face is now the reference
+     * illustration itself, beard and all, so geometry on top of it only
+     * competes with the drawing. The sides and back of the head carry beard in
+     * their own textures, toned from the same sampled palette.
      */
-    const beard = new THREE.Group();
-    head.add(beard);
-    const rbd = U_.rng(90210);
-
-    // The front of the face already carries a painted beard with the bare
-    // patches, and it reads well — so the geometry only adds volume around
-    // the SILHOUETTE: the sides of the jaw and the mass under the chin. An
-    // earlier pass ran the cluster right across the front and swallowed his
-    // nose and mouth.
-    for (const sx of [-1, 1]) {
-      for (let i = 0; i < 5; i++) {
-        const t = i / 4;
-        const phi = sx * (0.92 + t * 1.0);           // 53 to 110 degrees out
-        const r = 0.125 + t * 0.035 + rbd() * 0.02;
-        const lump = U_.inked(new THREE.SphereGeometry(r, 9, 7), c.beard, 0.045);
-        lump.position.set(
-          Math.sin(phi) * 0.42,
-          -0.34 + t * 0.3 + (rbd() - 0.5) * 0.04,
-          -Math.cos(phi) * 0.34 + 0.02
-        );
-        lump.scale.set(1, 1.15, 1);
-        beard.add(lump);
-      }
-    }
-
-    // Mass hanging under the chin, below the bottom of the head box so it
-    // adds a jawline without covering anything painted on the face.
-    for (let i = 0; i < 7; i++) {
-      const phi = (-1 + (i / 6) * 2) * 1.15;
-      const lump = U_.inked(new THREE.SphereGeometry(0.135 + rbd() * 0.03, 9, 7), c.beard, 0.045);
-      lump.position.set(
-        Math.sin(phi) * 0.31,
-        -0.45 + Math.abs(Math.sin(phi)) * 0.05,
-        -Math.cos(phi) * 0.3 + 0.02
-      );
-      beard.add(lump);
-    }
-
-    // Sideburns climbing in front of the ears to meet the hair
-    [-1, 1].forEach((sx) => {
-      for (let i = 0; i < 3; i++) {
-        const lump = U_.inked(new THREE.SphereGeometry(0.11 - i * 0.012, 8, 6), c.beard, 0.04);
-        lump.position.set(sx * 0.45, -0.12 + i * 0.14, -0.1 - i * 0.03);
-        beard.add(lump);
-      }
-    });
-
-    // Ragged tufts hanging off the underside so the edge isn't a clean rim
-    for (let i = 0; i < 12; i++) {
-      const phi = (-1 + (i / 11) * 2) * 1.5;
-      const tuft = U_.inked(new THREE.ConeGeometry(0.06, 0.18, 5), c.beard, 0.03);
-      tuft.position.set(
-        Math.sin(phi) * 0.32,
-        -0.56 - rbd() * 0.05,
-        -Math.cos(phi) * 0.29 + 0.02
-      );
-      tuft.rotation.set(Math.PI + (rbd() - 0.5) * 0.4, 0, (rbd() - 0.5) * 0.4);
-      beard.add(tuft);
-    }
 
     // Hair lives on the head so it follows the look-back twist.
     this.hairGroup = new THREE.Group();

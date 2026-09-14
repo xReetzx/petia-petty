@@ -8,7 +8,9 @@ Thumbs.db
 *.swp
 
 # Node (not used at runtime — no build step — but keep it clean)
-node_modules/
+# No trailing slash: the test harness may symlink this in, and `node_modules/`
+# does not match a symlink.
+node_modules
 package-lock.json
 
 # Local scratch
