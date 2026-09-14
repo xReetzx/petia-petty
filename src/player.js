@@ -55,11 +55,11 @@ PP.Player = (function () {
 
     // --- Head -------------------------------------------------------------
     const head = new THREE.Group();
-    head.position.y = 1.95;
+    head.position.y = 2.0;
     body.add(head);
     this.head = head;
 
-    const skullGeo = new THREE.BoxGeometry(0.68, 0.74, 0.62);
+    const skullGeo = new THREE.BoxGeometry(0.8, 0.86, 0.66);
     const faceTex = PP.Face.get('panic');
     // BoxGeometry material order is [+X, -X, +Y, -Y, +Z, -Z]. He runs toward
     // -Z, so -Z is his front and that's where the drawn portrait goes — the
@@ -76,7 +76,7 @@ PP.Player = (function () {
     // Ears
     [-1, 1].forEach((s) => {
       const ear = U_.inked(new THREE.SphereGeometry(0.1, 8, 6), c.skin, 0.045);
-      ear.position.set(s * 0.35, 0.0, 0);
+      ear.position.set(s * 0.41, 0.0, 0);
       ear.scale.set(0.6, 1, 0.7);
       head.add(ear);
     });
@@ -173,7 +173,7 @@ PP.Player = (function () {
 
     // Base cap — shrinks back as hair is lost
     const capScale = this.hair === 3 ? 1 : this.hair === 2 ? 0.86 : 0.7;
-    const cap = U_.inked(new THREE.SphereGeometry(0.37, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.58), c.hair, 0.06);
+    const cap = U_.inked(new THREE.SphereGeometry(0.43, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.58), c.hair, 0.06);
     cap.position.y = 0.3;
     cap.scale.set(1.02 * capScale, this.hair === 1 ? 0.5 : 0.85, 1.02 * capScale);
     this.hairGroup.add(cap);
@@ -195,7 +195,7 @@ PP.Player = (function () {
       const h = 0.26 + rand() * 0.22;
       spike(
         Math.cos(a) * r,
-        0.44 + rand() * 0.06,
+        0.5 + rand() * 0.07,
         Math.sin(a) * r * 0.85 - 0.03,
         h,
         [(rand() - 0.5) * 0.9, 0, (rand() - 0.5) * 0.9]

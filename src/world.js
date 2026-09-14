@@ -401,14 +401,17 @@ PP.World = (function () {
   };
 
   /** Advance the world toward the player by `dz` and stream in new content. */
-  World.prototype.update = function (dz, metres, speed, camZ) {
+  World.prototype.update = function (dz, metres, speed) {
     const cfg = PP.CFG;
 
     const shift = (arr, pool) => {
       for (let i = arr.length - 1; i >= 0; i--) {
         const it = arr[i];
         it.position.z += dz;
-        if (it.position.z > camZ + 12) {
+        // Anything the player has run past is still on screen behind him —
+        // it's the background of every frame now — so it lives much longer
+        // than it did when the camera trailed him.
+        if (it.position.z > PP.CFG.CULL_BEHIND) {
           this.scene.remove(it);
           if (pool) pool(it);
           arr.splice(i, 1);

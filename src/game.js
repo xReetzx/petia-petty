@@ -32,7 +32,7 @@ window.PP = window.PP || {};
     scene.fog = new THREE.Fog(PP.CFG.COL.paper, 45, 115);
 
     camera = new THREE.PerspectiveCamera(PP.CFG.FOV_BASE, 1, 0.1, 400);
-    camera.position.set(0, PP.CFG.CAM_HEIGHT, PP.CFG.CAM_BACK);
+    camera.position.set(0, PP.CFG.CAM_HEIGHT, -PP.CFG.CAM_LEAD_BASE);
 
     renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -94,9 +94,18 @@ window.PP = window.PP || {};
    * into a fisheye on very tall displays. */
   function framingFov() {
     const cfg = PP.CFG;
-    const dist = cfg.CAM_BACK + cfg.CAM_LOOK_AHEAD * 0.35;
+    const dist = camLead();
     const needed = 2 * Math.atan(cfg.FRAME_HALF_WIDTH / (camera.aspect * dist)) * 180 / Math.PI;
     return PP.U.clamp(Math.max(cfg.FOV_BASE, needed), cfg.FOV_BASE, cfg.FOV_MAX);
+  }
+
+  /* How far ahead of the player the camera rides. It backs off as the pace
+   * picks up so the stretch of track between the lens and the player — which
+   * is the entire runway the player gets to read an obstacle in — stays worth
+   * about the same number of seconds at any speed. */
+  function camLead() {
+    const cfg = PP.CFG;
+    return cfg.CAM_LEAD_BASE + G.speed * cfg.CAM_LEAD_PER_SPEED;
   }
 
   /* ---------------------------------------------------------------- input */
@@ -353,13 +362,13 @@ window.PP = window.PP || {};
   // Title / pause / game-over: keep the scene gently alive
   function idle(dt) {
     clippers.update(dt, 0, 0);
-    world.update(dt * 3.5, 0, 4, camera.position.z);
+    world.update(dt * 3.5, 0, 4);
     player.update(dt, 4);
     const t = performance.now() * 0.0004;
-    camera.position.x = Math.sin(t) * 1.4;
+    camera.position.x = Math.sin(t) * 1.6;
     camera.position.y = PP.CFG.CAM_HEIGHT + Math.sin(t * 1.7) * 0.2;
-    camera.position.z = PP.CFG.CAM_BACK;
-    camera.lookAt(0, PP.CFG.CAM_LOOK_Y, -PP.CFG.CAM_LOOK_AHEAD);
+    camera.position.z = -PP.CFG.CAM_LEAD_BASE;
+    camera.lookAt(0, PP.CFG.CAM_LOOK_Y, PP.CFG.CAM_LOOK_BEHIND);
   }
 
   function step(dt) {
@@ -386,7 +395,7 @@ window.PP = window.PP || {};
     }
 
     player.update(dt, G.speed);
-    world.update(dz, G.metres, G.speed, camera.position.z);
+    world.update(dz, G.metres, G.speed);
     checkCollisions(dt);
 
     const connected = clippers.update(dt, player.x, G.speed);
@@ -405,25 +414,27 @@ window.PP = window.PP || {};
     // Camera trails the player laterally rather than locking to him — makes
     // lane changes feel like movement instead of the world sliding. On narrow
     // screens it follows more closely so he stays comfortably in frame.
-    const follow = camera.aspect < 1 ? 0.82 : 0.55;
+    const follow = camera.aspect < 1 ? 0.8 : 0.5;
     const camX = U.damp(camera.position.x, player.x * follow, 6, dt);
     const camY = U.damp(
       camera.position.y,
-      cfg.CAM_HEIGHT + player.y * 0.35 + (player.sliding ? -0.35 : 0),
+      cfg.CAM_HEIGHT + player.y * 0.3 + (player.sliding ? -0.3 : 0),
       7, dt
     );
+    const camZ = U.damp(camera.position.z, -camLead(), 2.5, dt);
 
     if (G.shake > 0) G.shake = Math.max(0, G.shake - dt * cfg.SHAKE_DECAY);
     const s = G.shake * G.shake;
     camera.position.set(
       camX + (Math.random() - 0.5) * s * 0.85,
       camY + (Math.random() - 0.5) * s * 0.85,
-      cfg.CAM_BACK
+      camZ
     );
+    // Aim back past the player, into the oncoming chase.
     camera.lookAt(
-      player.x * (camera.aspect < 1 ? 0.6 : 0.35),
-      cfg.CAM_LOOK_Y + player.y * 0.4,
-      -cfg.CAM_LOOK_AHEAD
+      player.x * (camera.aspect < 1 ? 0.55 : 0.3),
+      cfg.CAM_LOOK_Y + player.y * 0.45,
+      cfg.CAM_LOOK_BEHIND
     );
 
     // FOV punches in as the clippers close — the walls feel like they narrow
@@ -453,7 +464,15 @@ window.PP = window.PP || {};
     lane: () => player.targetLane,
     playerY: () => +player.y.toFixed(3),
     sliding: () => player.sliding,
-    fov: () => +camera.fov.toFixed(1)
+    fov: () => +camera.fov.toFixed(1),
+    camZ: () => +camera.position.z.toFixed(2),
+    // Dot of the player's facing direction (his front is -Z) against the
+    // direction from him to the camera. Positive means we're seeing his face.
+    facingCamera: () => {
+      const toCam = new THREE.Vector3().subVectors(camera.position, player.root.position).normalize();
+      const forward = new THREE.Vector3(0, 0, -1);
+      return +forward.dot(toCam).toFixed(3);
+    }
   };
 
   if (document.readyState === 'loading') {

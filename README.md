@@ -58,11 +58,16 @@ vendor/           Three.js r128 (MIT), vendored so this runs offline
 
 ### Notes on a couple of non-obvious choices
 
-**The clippers hover overhead rather than sitting behind you.** The camera is
-already behind the player, so anything chasing from further back would be
-behind the camera and invisible. Instead they hold station just over his
-shoulder and *descend* as menace rises — high overhead when you're clean, down
-at scalp level with the teeth bared when they're about to strike.
+**The camera flies backwards ahead of the runner.** It leads him and looks
+back, so he runs toward you and you can see his face — and the clippers,
+chasing from behind him, are further from the lens than he is and simply grow
+as they close. An earlier build had the camera trailing him, which put the
+clippers behind the camera where they were invisible for the entire run.
+
+**The camera's lead scales with speed.** The stretch of street between the lens
+and the player is the whole runway you get to read an obstacle in, so the
+camera backs off as the pace climbs and that runway stays worth about the same
+number of seconds at any speed.
 
 **Outlines are inverted-hull, not post-processing.** Each mesh gets a
 back-faced copy scaled slightly outward. It costs one extra draw call per

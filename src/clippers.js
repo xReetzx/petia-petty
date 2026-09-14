@@ -94,13 +94,13 @@ PP.Clippers = (function () {
         })
       );
       l.rotation.x = Math.PI / 2;
-      l.position.set((Math.random() - 0.5) * 3.0, (Math.random() - 0.5) * 1.8, 1.6 + Math.random() * 1.2);
+      l.position.set((Math.random() - 0.5) * 3.4, (Math.random() - 0.5) * 2.0, 2.2 + Math.random() * 2.4);
       this.speedLines.add(l);
     }
 
     g.scale.setScalar(PP.CFG.CHASE_SCALE);
-    g.rotation.x = -0.5;   // jaws angled down at the player
-    g.rotation.y = 0.28;   // three-quarter view so it reads as clippers
+    g.rotation.x = -0.18;  // jaws angled slightly down at the player
+    g.rotation.y = 0.34;   // three-quarter view so it reads as clippers
     this.root.position.set(0, PP.CFG.CHASE_Y_FAR, PP.CFG.CHASE_Z_FAR);
   };
 
@@ -148,24 +148,23 @@ PP.Clippers = (function () {
     // Distance behind the player, eased so the approach feels weighty
     const eased = U.easeOutCubic(this.menace);
     const baseZ = U.lerp(cfg.CHASE_Z_FAR, cfg.CHASE_Z_NEAR, eased);
-    const z = baseZ - this.lunge * (baseZ - 1.2);
+    const z = baseZ - this.lunge * (baseZ - 1.4);
     this.root.position.z = U.damp(this.root.position.z, z, 7, dt);
 
     // Track the player laterally, lagging behind so it reads as pursuit
     this.x = U.damp(this.x, playerX, 3.2 + eased * 3, dt);
     this.root.position.x = this.x;
 
-    // They hang high overhead when calm and swoop down to head height as they
-    // close — which keeps them on screen the whole run without ever hiding
-    // the track the player needs to read.
+    // Height barely changes now. The camera leads the player, so the clippers
+    // simply loom larger as they close the gap — which does honestly what the
+    // old overhead swoop was faking.
     const baseY = U.lerp(cfg.CHASE_Y_FAR, cfg.CHASE_Y_NEAR, eased);
-    const y = baseY - this.lunge * (baseY - 3.0);
+    const y = baseY - this.lunge * (baseY - 2.3);
     this.root.position.y = U.damp(this.root.position.y, y, 8, dt);
 
-    // Tip the whole unit down toward the player as they descend
-    // Tip the jaws further down the angrier they get
-    this.rig.rotation.x = U.damp(this.rig.rotation.x, -0.5 - eased * 0.38 - this.lunge * 0.3, 7, dt);
-    this.rig.rotation.y = U.damp(this.rig.rotation.y, 0.28 - eased * 0.16, 6, dt);
+    // Tip the jaws down toward his scalp as they line up the cut
+    this.rig.rotation.x = U.damp(this.rig.rotation.x, -0.18 - eased * 0.3 - this.lunge * 0.35, 7, dt);
+    this.rig.rotation.y = U.damp(this.rig.rotation.y, 0.34 - eased * 0.22, 6, dt);
 
     // Blades chatter faster the closer they get
     this.chatter += dt * (26 + eased * 40);
@@ -182,8 +181,8 @@ PP.Clippers = (function () {
     this.speedLines.visible = showLines;
     if (showLines) {
       this.speedLines.children.forEach((l) => {
-        l.position.z += dt * speed * 0.35;
-        if (l.position.z > 3.2) l.position.z = 1.5;
+        l.position.z += dt * speed * 0.4;
+        if (l.position.z > 5.2) l.position.z = 2.0;
         l.material.opacity = 0.15 + eased * 0.3;
       });
     }

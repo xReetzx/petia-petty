@@ -41,16 +41,14 @@ PP.CFG = {
   // in the air just over his shoulder and DESCEND as menace rises: high and
   // small in the top of the frame when calm, down at head height and filling
   // the space behind him when they're about to strike.
-  // Because the camera sits behind the player, moving the clippers "closer"
-  // in Z actually moves them AWAY from the camera — so distance can't carry
-  // the threat. Height does instead: they hold station just behind him at a
-  // near-constant depth and DROP from high overhead down to scalp level as
-  // menace climbs. The lunge then swoops them down and forward onto his head.
-  CHASE_Z_FAR: 2.6,              // depth behind the player at menace 0
-  CHASE_Z_NEAR: 2.0,             // depth behind the player at menace 1
-  CHASE_Y_FAR: 4.1,              // high overhead when calm
-  CHASE_Y_NEAR: 3.9,             // hovering right above his scalp when furious
-  CHASE_SCALE: 0.78,             // overall size of the clipper rig
+  // The camera leads the player, so the clippers chasing from behind him are
+  // FURTHER from the lens than he is — distance carries the threat all by
+  // itself. They start way back down the street and grow as they close.
+  CHASE_Z_FAR: 22.0,             // distance behind the player at menace 0
+  CHASE_Z_NEAR: 2.8,             // breathing down his neck at menace 1
+  CHASE_Y_FAR: 3.0,              // roughly head height throughout...
+  CHASE_Y_NEAR: 2.7,             // ...dipping slightly as they line up the cut
+  CHASE_SCALE: 1.15,             // overall size of the clipper rig
 
   // ---- Pickups ------------------------------------------------------------
   TUFT_VALUE: 10,
@@ -71,13 +69,22 @@ PP.CFG = {
   MIN_REACTION: 0.55,            // seconds of clear runway guaranteed before any obstacle
 
   // ---- Camera -------------------------------------------------------------
-  CAM_HEIGHT: 3.9,
-  CAM_BACK: 8.6,
-  CAM_LOOK_AHEAD: 10,
-  CAM_LOOK_Y: 2.2,
-  FOV_BASE: 60,
-  FOV_MAX: 96,                   // ceiling when widening for narrow phones
-  FRAME_HALF_WIDTH: 5.2,         // world half-extent that must stay in frame
+  // The camera flies backwards AHEAD of the player, looking back at him, so
+  // he runs toward the viewer and you can see his face and the clippers
+  // bearing down behind him. It rides high and pitched down, which stacks the
+  // frame cleanly: upcoming obstacles low, the player in the middle, the
+  // clippers and the receding street above him.
+  CAM_HEIGHT: 3.6,
+  CAM_LEAD_BASE: 7.5,            // how far ahead of the player the camera sits
+  CAM_LEAD_PER_SPEED: 0.40,      // ...plus this much per unit of speed, so the
+                                 //    runway stays readable as the pace climbs
+  CAM_LOOK_Y: 1.9,
+  CAM_LOOK_BEHIND: 2.0,          // aim just past him, into the chase
+  FOV_BASE: 44,
+  FOV_MAX: 92,                   // ceiling when widening for narrow phones
+  FRAME_HALF_WIDTH: 5.4,         // world half-extent that must stay in frame
+  CULL_BEHIND: 58,               // keep passed geometry alive this far back —
+                                 //    it's the visible background now
   FOV_MENACE: 9,                 // extra FOV punched in as the clippers close
   SHAKE_DECAY: 4.5,
 
