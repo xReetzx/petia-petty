@@ -76,6 +76,7 @@ window.PP = window.PP || {};
     G.lastT = performance.now();
     G.raf = requestAnimationFrame(frame);
 
+    window.__PP_PLAYER = player;   // inspection hook
     window.__PP_READY = true;
   }
 
@@ -475,6 +476,25 @@ window.PP = window.PP || {};
     },
     setHair: (n) => { player.setHair(n); PP.UI.setHair(player.hair, PP.CFG.HAIR_MAX); },
     // Park the camera behind his head — used only to inspect the scalp
+    // Orbit the character for a turnaround sheet: angle in degrees, 0 = front
+    poseCam: (angleDeg, dist, height, lookY) => {
+      G.freezeCam = true;
+      G.state = S.PAUSE;
+      const a = angleDeg * Math.PI / 180;
+      camera.position.set(Math.sin(a) * dist, height, Math.cos(a) * dist);
+      camera.lookAt(0, lookY, 0);
+      camera.fov = 30;
+      camera.updateProjectionMatrix();
+    },
+    hideWorld: () => {
+      scene.traverse((o) => {
+        if (o.isMesh && !player.root.getObjectById(o.id)) o.visible = false;
+      });
+      player.root.traverse((o) => { if (o.isMesh) o.visible = true; });
+      clippers.root.visible = false;
+      scene.background = new THREE.Color(0xf4efe4);
+      scene.fog = null;
+    },
     headCam: () => {
       G.freezeCam = true;
       G.state = S.PAUSE;

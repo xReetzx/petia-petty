@@ -220,11 +220,12 @@ PP.Face = (function () {
     ctx.fillStyle = col;
     // Heavy, angled down toward the nose — the reference's default expression
     [-1, 1].forEach((s) => {
-      const outer = P.cx + s * 140, inner = P.cx + s * 26;
+      const outer = P.cx + s * 128, inner = P.cx + s * 26;
       ctx.beginPath();
-      ctx.moveTo(outer, P.browY + 16);
-      ctx.quadraticCurveTo(P.cx + s * 82, P.browY - 20, inner, P.browY + 4);
-      ctx.quadraticCurveTo(P.cx + s * 82, P.browY + 4, outer, P.browY + 34);
+      ctx.moveTo(inner, P.browY + 2);
+      ctx.quadraticCurveTo(P.cx + s * 80, P.browY - 20, outer, P.browY + 14);
+      // Taper to a point at the outer end rather than stopping square
+      ctx.quadraticCurveTo(P.cx + s * 80, P.browY + 6, inner, P.browY + 20);
       ctx.closePath();
       ctx.fill();
     });
@@ -349,6 +350,150 @@ PP.Face = (function () {
     ctx.stroke();
   }
 
+
+  /* ---- The other faces of the head ---------------------------------------
+   * The chase camera looks at the back of his head for the entire run, and a
+   * turnaround showed the sides and back were bare skin slabs. These fill the
+   * remaining faces of the head box so he reads from every angle.
+   */
+
+  /** Profile: ear on bare cheek, beard along the jaw below it, sideburn
+   *  joining the two. Note this canvas has nothing painted beneath it, so the
+   *  bare patches are drawn as skin rather than punched with destination-out
+   *  the way the front is — punching here just erases to transparent, which
+   *  renders as a white hole on the model. */
+  function sideTexture() {
+    const c = C();
+    const cv = document.createElement('canvas');
+    cv.width = S; cv.height = S;
+    const ctx = cv.getContext('2d');
+
+    ctx.fillStyle = hex(c.skin);
+    ctx.fillRect(0, 0, S, S);
+    PP.U.hatch(ctx, 0, 0, S, S, 9, Math.PI / 3.1, 0.09, hex(c.skinDark));
+
+    // Beard along the jaw: the lower two fifths, top edge dipping slightly
+    const beardTop = (x) => 306 + Math.sin((x / S) * Math.PI) * 26;
+    ctx.fillStyle = hex(c.beard);
+    ctx.beginPath();
+    ctx.moveTo(0, beardTop(0));
+    for (let x = 0; x <= S; x += 16) ctx.lineTo(x, beardTop(x));
+    ctx.lineTo(S, S); ctx.lineTo(0, S);
+    ctx.closePath();
+    ctx.fill();
+
+    // Ragged upper edge
+    ctx.strokeStyle = hex(c.beard);
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 230; i++) {
+      const x = Math.random() * S;
+      const e = beardTop(x);
+      ctx.lineWidth = 1.8 + Math.random() * 2.2;
+      ctx.globalAlpha = 0.4 + Math.random() * 0.6;
+      ctx.beginPath();
+      ctx.moveTo(x, e - Math.random() * 30);
+      ctx.lineTo(x + (Math.random() - 0.5) * 6, e + 8);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // Sideburn dropping from the hairline into the beard, in front of the ear
+    ctx.fillStyle = hex(c.beard);
+    ctx.beginPath();
+    ctx.moveTo(150, 96);
+    ctx.quadraticCurveTo(196, 190, 190, 316);
+    ctx.lineTo(132, 316);
+    ctx.quadraticCurveTo(126, 190, 108, 100);
+    ctx.closePath();
+    ctx.fill();
+
+    // A bare spot in the beard, painted as skin — the alopecia carries round
+    ctx.save();
+    ctx.translate(320, 392);
+    ctx.rotate(0.18);
+    const g = ctx.createRadialGradient(0, 0, 1, 0, 0, 44);
+    g.addColorStop(0, hex(c.skin));
+    g.addColorStop(0.72, hex(c.skin));
+    g.addColorStop(1, 'rgba(242,189,151,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(0, 0, 44, 34, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(92,56,42,0.3)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(0, 0, 38, 29, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+
+    // Ear, sitting on bare cheek above the beard line
+    ctx.fillStyle = hex(c.skin);
+    ctx.strokeStyle = hex(c.ink);
+    ctx.lineWidth = 5.5;
+    ctx.beginPath();
+    ctx.ellipse(276, 226, 44, 60, -0.16, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+    ctx.lineWidth = 3.4;
+    ctx.beginPath();
+    ctx.ellipse(280, 232, 20, 32, -0.16, Math.PI * 0.2, Math.PI * 1.45);
+    ctx.stroke();
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(268, 272); ctx.quadraticCurveTo(288, 280, 296, 262);
+    ctx.stroke();
+
+    PP.U.hatch(ctx, 0, 0, S, S, 30, Math.PI / 4, 0.035, hex(c.ink));
+    const tex = new THREE.CanvasTexture(cv);
+    tex.anisotropy = 4;
+    return tex;
+  }
+
+  /** Back of the head: hairline dropping to a bare nape. */
+  function backTexture() {
+    const c = C();
+    const cv = document.createElement('canvas');
+    cv.width = S; cv.height = S;
+    const ctx = cv.getContext('2d');
+
+    ctx.fillStyle = hex(c.skin);
+    ctx.fillRect(0, 0, S, S);
+    PP.U.hatch(ctx, 0, 0, S, S, 10, Math.PI / 2.8, 0.09, hex(c.skinDark));
+
+    // Hair down to just below the ears, with a ragged hairline
+    ctx.fillStyle = hex(c.hair);
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(S, 0); ctx.lineTo(S, 300);
+    ctx.quadraticCurveTo(384, 356, 256, 344);
+    ctx.quadraticCurveTo(128, 356, 0, 300);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = hex(c.hair);
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 220; i++) {
+      const x = Math.random() * S;
+      const t = x / S;
+      const edge = 300 + Math.sin(t * Math.PI) * 46;
+      ctx.lineWidth = 2 + Math.random() * 2.4;
+      ctx.beginPath();
+      ctx.moveTo(x, edge - 14 - Math.random() * 20);
+      ctx.lineTo(x + (Math.random() - 0.5) * 7, edge + Math.random() * 16);
+      ctx.stroke();
+    }
+
+    PP.U.hatch(ctx, 0, 0, S, S, 30, Math.PI / 4, 0.035, hex(c.ink));
+    const tex = new THREE.CanvasTexture(cv);
+    tex.anisotropy = 4;
+    return tex;
+  }
+
+  /** Under the chin — beard all the way. */
+  function underTexture() {
+    const c = C();
+    const cv = document.createElement('canvas');
+    cv.width = 128; cv.height = 128;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = hex(c.beard);
+    ctx.fillRect(0, 0, 128, 128);
+    PP.U.hatch(ctx, 0, 0, 128, 128, 5, Math.PI / 2.5, 0.28, '#000');
+    return new THREE.CanvasTexture(cv);
+  }
+
   /**
    * mode: 'panic' (in-run) | 'determined' (title) | 'dead' (game over)
    */
@@ -381,5 +526,10 @@ PP.Face = (function () {
     return cache[mode];
   }
 
-  return { get, build, PATCHES };
+  const sideCache = {}, backCache = {}, underCache = {};
+  const side = () => (sideCache.t || (sideCache.t = sideTexture()));
+  const back = () => (backCache.t || (backCache.t = backTexture()));
+  const under = () => (underCache.t || (underCache.t = underTexture()));
+
+  return { get, build, side, back, under, PATCHES };
 })();

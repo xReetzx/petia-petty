@@ -43,48 +43,128 @@ PP.Player = (function () {
     this.root.add(body);
 
     // --- Torso: maroon tee ------------------------------------------------
-    const torso = U_.inked(new THREE.BoxGeometry(0.94, 0.94, 0.58), c.shirt, 0.075);
+    const torso = U_.inked(new THREE.BoxGeometry(1.06, 0.96, 0.66), c.shirt, 0.075);
     torso.position.y = 1.12;
     body.add(torso);
 
     // Shoulders rounded off so the silhouette isn't a pure box
-    const shoulders = U_.inked(new THREE.CylinderGeometry(0.31, 0.31, 0.94, 10), c.shirt, 0.06);
+    const shoulders = U_.inked(new THREE.CylinderGeometry(0.36, 0.36, 1.1, 12), c.shirt, 0.06);
     shoulders.rotation.z = Math.PI / 2;
-    shoulders.position.y = 1.48;
+    shoulders.position.y = 1.5;
     body.add(shoulders);
 
     // --- Head -------------------------------------------------------------
     const head = new THREE.Group();
-    head.position.y = 2.0;
+    head.position.y = 1.97;
     body.add(head);
     this.head = head;
 
-    const skullGeo = new THREE.BoxGeometry(0.8, 0.86, 0.66);
-    const faceTex = PP.Face.get('panic');
+    // A touch wider than tall so it reads as a head rather than a slab.
+    const skullGeo = new THREE.BoxGeometry(0.9, 0.82, 0.76);
+
     // BoxGeometry material order is [+X, -X, +Y, -Y, +Z, -Z]. He runs toward
-    // -Z, so -Z is his front and that's where the drawn portrait goes — the
-    // chase camera correctly sees the back of his head, and the face swings
-    // into view during the look-back stumble.
-    const skin = U_.toonMat(c.skin);
-    const faceMat = U_.toonMat(0xffffff, { map: faceTex });
-    const skull = new THREE.Mesh(skullGeo, [skin, skin, skin, skin, skin, faceMat]);
+    // -Z, so -Z is his front. Every face gets its own drawn texture: a
+    // turnaround showed that with only the front painted, the sides and back
+    // were bare skin slabs — and the chase camera looks at the back of his
+    // head for the entire run, so that was the view that mattered most.
+    const faceMat  = U_.toonMat(0xffffff, { map: PP.Face.get('panic') });
+    const sideMatL = U_.toonMat(0xffffff, { map: PP.Face.side() });
+    const sideMatR = U_.toonMat(0xffffff, { map: PP.Face.side() });
+    sideMatR.map = sideMatR.map.clone();
+    sideMatR.map.wrapS = THREE.RepeatWrapping;
+    sideMatR.map.repeat.x = -1;          // mirror, so both ears face forward
+    sideMatR.map.needsUpdate = true;
+    const backMat  = U_.toonMat(0xffffff, { map: PP.Face.back() });
+    const underMat = U_.toonMat(0xffffff, { map: PP.Face.under() });
+    const topMat   = U_.toonMat(c.hair);
+
+    const skull = new THREE.Mesh(skullGeo,
+      [sideMatR, sideMatL, topMat, underMat, backMat, faceMat]);
     U_.outline(skull, 0.07);
     head.add(skull);
     this.skull = skull;
     this.faceMat = faceMat;
 
-    // Ears
+    // Ears, sitting proud of the drawn ones on the side textures
     [-1, 1].forEach((s) => {
-      const ear = U_.inked(new THREE.SphereGeometry(0.1, 8, 6), c.skin, 0.045);
-      ear.position.set(s * 0.41, 0.0, 0);
-      ear.scale.set(0.6, 1, 0.7);
+      const ear = U_.inked(new THREE.SphereGeometry(0.12, 8, 6), c.skin, 0.04);
+      ear.position.set(s * 0.45, -0.02, 0.02);
+      ear.scale.set(0.5, 1.05, 0.8);
       head.add(ear);
     });
 
-    // Neck
-    const neck = U_.inked(new THREE.CylinderGeometry(0.17, 0.19, 0.2, 8), c.skin, 0.045);
-    neck.position.y = 1.62;
-    body.add(neck);
+    /* The beard as geometry rather than paint.
+     *
+     * Painting it on the box faces meant the front's U-shape and the sides'
+     * band met at the corners without lining up, which is the thing that read
+     * most wrongly against the reference drawing.
+     *
+     * Built from overlapping closed spheres rather than a swept ring: an
+     * open-ended cylinder can't take the inverted-hull outline treatment —
+     * the hull renders its black interior and you get dark wedges through the
+     * head — and a cluster gives the chunky, ragged mass the ink drawing has
+     * anyway. It overlaps the painted beard on the face, which reads as the
+     * beard having volume rather than being a decal.
+     */
+    const beard = new THREE.Group();
+    head.add(beard);
+    const rbd = U_.rng(90210);
+
+    // The front of the face already carries a painted beard with the bare
+    // patches, and it reads well — so the geometry only adds volume around
+    // the SILHOUETTE: the sides of the jaw and the mass under the chin. An
+    // earlier pass ran the cluster right across the front and swallowed his
+    // nose and mouth.
+    for (const sx of [-1, 1]) {
+      for (let i = 0; i < 5; i++) {
+        const t = i / 4;
+        const phi = sx * (0.92 + t * 1.0);           // 53 to 110 degrees out
+        const r = 0.125 + t * 0.035 + rbd() * 0.02;
+        const lump = U_.inked(new THREE.SphereGeometry(r, 9, 7), c.beard, 0.045);
+        lump.position.set(
+          Math.sin(phi) * 0.42,
+          -0.34 + t * 0.3 + (rbd() - 0.5) * 0.04,
+          -Math.cos(phi) * 0.34 + 0.02
+        );
+        lump.scale.set(1, 1.15, 1);
+        beard.add(lump);
+      }
+    }
+
+    // Mass hanging under the chin, below the bottom of the head box so it
+    // adds a jawline without covering anything painted on the face.
+    for (let i = 0; i < 7; i++) {
+      const phi = (-1 + (i / 6) * 2) * 1.15;
+      const lump = U_.inked(new THREE.SphereGeometry(0.135 + rbd() * 0.03, 9, 7), c.beard, 0.045);
+      lump.position.set(
+        Math.sin(phi) * 0.31,
+        -0.45 + Math.abs(Math.sin(phi)) * 0.05,
+        -Math.cos(phi) * 0.3 + 0.02
+      );
+      beard.add(lump);
+    }
+
+    // Sideburns climbing in front of the ears to meet the hair
+    [-1, 1].forEach((sx) => {
+      for (let i = 0; i < 3; i++) {
+        const lump = U_.inked(new THREE.SphereGeometry(0.11 - i * 0.012, 8, 6), c.beard, 0.04);
+        lump.position.set(sx * 0.45, -0.12 + i * 0.14, -0.1 - i * 0.03);
+        beard.add(lump);
+      }
+    });
+
+    // Ragged tufts hanging off the underside so the edge isn't a clean rim
+    for (let i = 0; i < 12; i++) {
+      const phi = (-1 + (i / 11) * 2) * 1.5;
+      const tuft = U_.inked(new THREE.ConeGeometry(0.06, 0.18, 5), c.beard, 0.03);
+      tuft.position.set(
+        Math.sin(phi) * 0.32,
+        -0.56 - rbd() * 0.05,
+        -Math.cos(phi) * 0.29 + 0.02
+      );
+      tuft.rotation.set(Math.PI + (rbd() - 0.5) * 0.4, 0, (rbd() - 0.5) * 0.4);
+      beard.add(tuft);
+    }
 
     // Hair lives on the head so it follows the look-back twist.
     this.hairGroup = new THREE.Group();
@@ -94,19 +174,19 @@ PP.Player = (function () {
     this.arms = [];
     [-1, 1].forEach((s) => {
       const pivot = new THREE.Group();
-      pivot.position.set(s * 0.52, 1.45, 0);
+      pivot.position.set(s * 0.58, 1.45, 0);
       body.add(pivot);
-      const upper = U_.inked(new THREE.BoxGeometry(0.21, 0.52, 0.21), c.shirt, 0.05);
-      upper.position.y = -0.26;
+      const upper = U_.inked(new THREE.BoxGeometry(0.25, 0.62, 0.25), c.shirt, 0.05);
+      upper.position.y = -0.31;
       pivot.add(upper);
       const fore = new THREE.Group();
       fore.position.y = -0.52;
       pivot.add(fore);
-      const lower = U_.inked(new THREE.BoxGeometry(0.19, 0.5, 0.19), c.skin, 0.05);
-      lower.position.y = -0.25;
+      const lower = U_.inked(new THREE.BoxGeometry(0.19, 0.42, 0.19), c.skin, 0.05);
+      lower.position.y = -0.21;
       fore.add(lower);
-      const fist = U_.inked(new THREE.SphereGeometry(0.135, 8, 6), c.skin, 0.045);
-      fist.position.y = -0.52;
+      const fist = U_.inked(new THREE.SphereGeometry(0.125, 8, 6), c.skin, 0.045);
+      fist.position.y = -0.46;
       fore.add(fist);
       this.arms.push({ pivot, fore, side: s });
     });
@@ -115,9 +195,9 @@ PP.Player = (function () {
     this.legs = [];
     [-1, 1].forEach((s) => {
       const pivot = new THREE.Group();
-      pivot.position.set(s * 0.22, 0.7, 0);
+      pivot.position.set(s * 0.25, 0.72, 0);
       body.add(pivot);
-      const thigh = U_.inked(new THREE.BoxGeometry(0.27, 0.46, 0.27), c.jeans, 0.05);
+      const thigh = U_.inked(new THREE.BoxGeometry(0.3, 0.46, 0.3), c.jeans, 0.05);
       thigh.position.y = -0.23;
       pivot.add(thigh);
       const shin = new THREE.Group();
@@ -181,11 +261,11 @@ PP.Player = (function () {
     // Scalp: always present, so a buzzed patch shows skin underneath
     if (!this.scalp) {
       this.scalp = U_.inked(
-        new THREE.SphereGeometry(0.4, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.54),
+        new THREE.SphereGeometry(0.48, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.5),
         c.skin, 0.045
       );
-      this.scalp.position.y = 0.3;
-      this.scalp.scale.set(1.0, 0.82, 1.02);
+      this.scalp.position.set(0, 0.2, 0.1);
+      this.scalp.scale.set(0.96, 0.9, 0.9);
       this.head.add(this.scalp);
     }
 
@@ -211,12 +291,39 @@ PP.Player = (function () {
     if (stage === 3) {
       // Full mop: cap plus spikes all over
       const cap = U_.inked(
-        new THREE.SphereGeometry(0.43, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.58),
+        new THREE.SphereGeometry(0.52, 14, 12, 0, Math.PI * 2, 0, Math.PI * 0.55),
         c.hair, 0.06
       );
-      cap.position.y = 0.34;
-      cap.scale.set(1.02, 0.85, 1.02);
+      cap.position.set(0, 0.2, 0.13);
+      cap.scale.set(1.0, 0.95, 0.94);
       this.hairGroup.add(cap);
+
+      // A separate slab down the back of the skull, which the shell alone
+      // no longer reaches now that its sweep stops at the hairline.
+      const nape = U_.inked(
+        new THREE.SphereGeometry(0.46, 12, 10, 0, Math.PI, Math.PI * 0.25, Math.PI * 0.45),
+        c.hair, 0.05
+      );
+      nape.position.set(0, 0.16, 0.2);
+      nape.rotation.y = -Math.PI / 2;
+      nape.scale.set(1.0, 1.0, 0.85);
+      this.hairGroup.add(nape);
+
+      // Overlapping lumps that break up the dome. A smooth cap read as a
+      // helmet; the reference's hair is a messy irregular mass, and a handful
+      // of offset blobs gets most of the way there for almost nothing.
+      const rh = U_.rng(4242);
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * Math.PI * 2 + rh() * 0.5;
+        const lump = U_.inked(new THREE.SphereGeometry(0.2 + rh() * 0.09, 8, 7), c.hair, 0.05);
+        lump.position.set(
+          Math.cos(a) * (0.2 + rh() * 0.13),
+          0.3 + rh() * 0.13,
+          Math.sin(a) * (0.18 + rh() * 0.12) + 0.1
+        );
+        lump.scale.set(1, 0.78 + rh() * 0.3, 1);
+        this.hairGroup.add(lump);
+      }
 
       for (let i = 0; i < 16; i++) {
         const a = (i / 16) * Math.PI * 2 + rand() * 0.4;
@@ -232,12 +339,12 @@ PP.Player = (function () {
       // side panels with a gap, so the bare scalp shows down the centre.
       [-1, 1].forEach((side) => {
         const panel = U_.inked(
-          new THREE.SphereGeometry(0.42, 10, 8, 0, Math.PI, 0, Math.PI * 0.56),
+          new THREE.SphereGeometry(0.48, 10, 8, 0, Math.PI, 0, Math.PI * 0.5),
           c.hair, 0.055
         );
-        panel.position.set(side * 0.13, 0.32, 0);
+        panel.position.set(side * 0.15, 0.24, 0.05);
         panel.rotation.y = side > 0 ? -Math.PI / 2 : Math.PI / 2;
-        panel.scale.set(0.82, 0.8, 1.0);
+        panel.scale.set(0.78, 0.86, 0.96);
         this.hairGroup.add(panel);
       });
       // Surviving spikes, only out at the sides
@@ -254,10 +361,10 @@ PP.Player = (function () {
     // stage 1 — horseshoe: crown completely gone, a band round the back
     // and sides only.
     const band = U_.inked(
-      new THREE.TorusGeometry(0.33, 0.085, 7, 18, Math.PI * 1.35),
+      new THREE.TorusGeometry(0.38, 0.09, 7, 18, Math.PI * 1.35),
       c.hair, 0.045
     );
-    band.position.set(0, 0.2, 0.02);
+    band.position.set(0, 0.14, 0.05);
     band.rotation.set(Math.PI / 2, 0, -Math.PI * 0.18);
     band.scale.set(1.12, 1.0, 1.0);
     this.hairGroup.add(band);
