@@ -38,9 +38,10 @@ PP.Face = (function () {
   /* Where the bare spots sit: [x, y, radiusX, radiusY, rotation].
    * The big one on the viewer's right is the prominent patch in the reference
    * drawing; the smaller ones are the scatter that comes with it. */
+  // The drawing has exactly one bare spot, high on his left cheek where the
+  // beard thins out. Earlier versions scattered several and he looked mangy.
   const PATCHES = [
-    [330, 384, 46, 37,  0.20],   // the prominent one, on his left cheek
-    [176, 424, 22, 17, -0.30]    // one smaller spot along the far jaw
+    [360, 348, 42, 35, 0.18]
   ];
 
   // ---- Skin ---------------------------------------------------------------
@@ -72,6 +73,18 @@ PP.Face = (function () {
     PP.U.hatch(ctx, 330, 90, 150, 330, 8, Math.PI / 3.1, 0.1, hex(c.skinDark));
     // Brow shadow across the top of the sockets
     PP.U.hatch(ctx, 120, 196, 272, 40, 6, Math.PI / 2.6, 0.09, hex(c.skinDark));
+
+    // Forehead creases
+    ctx.strokeStyle = 'rgba(112,66,48,0.4)';
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 3; i++) {
+      const y = 112 + i * 22;
+      ctx.lineWidth = 3 - i * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(P.cx - 104 + i * 8, y + 4);
+      ctx.quadraticCurveTo(P.cx, y - 8, P.cx + 104 - i * 8, y + 5);
+      ctx.stroke();
+    }
   }
 
   function jawline(ctx) {
@@ -273,67 +286,121 @@ PP.Face = (function () {
   }
 
   function eyes(ctx, mode) {
-    const wide = mode === 'panic';
-    const ry = wide ? P.eyeRy + 6 : P.eyeRy;
-    const glance = wide ? -9 : -4;
+    /* Narrow and hooded, not big and round.
+     *
+     * Round cartoon eyes were the single thing making him look like a
+     * different person: in the reference they are half-lidded and tired, with
+     * a heavy upper lid cutting across the iris, deep bags underneath, and
+     * crow's feet at the outer corners. */
+    const ry = (mode === 'panic') ? P.eyeRy * 0.78 : P.eyeRy * 0.62;
+    const rx = P.eyeRx * 1.06;
+    const glance = -10;                       // both eyes cut to his right
 
-    [-1, 1].forEach((s) => {
-      const cx = P.cx + s * P.eyeDx, cy = P.eyeY;
-
-      ctx.fillStyle = '#f8f4ec';
-      ctx.beginPath(); ctx.ellipse(cx, cy, P.eyeRx, ry, 0, 0, Math.PI * 2); ctx.fill();
+    [-1, 1].forEach((s2) => {
+      const cx = P.cx + s2 * P.eyeDx, cy = P.eyeY;
 
       if (mode === 'dead') {
-        // Defeated: eyes screwed shut
         ctx.strokeStyle = hex(C().ink); ctx.lineWidth = 6; ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.moveTo(cx - P.eyeRx, cy - 6);
-        ctx.quadraticCurveTo(cx, cy + 14, cx + P.eyeRx, cy - 6);
+        ctx.moveTo(cx - rx, cy - 5);
+        ctx.quadraticCurveTo(cx, cy + 13, cx + rx, cy - 5);
         ctx.stroke();
         return;
       }
 
+      // The opening: an almond, flatter on top where the lid sits
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(cx - rx, cy + 2);
+      ctx.quadraticCurveTo(cx - rx * 0.3, cy - ry * 1.5, cx + rx * 0.55, cy - ry * 0.85);
+      ctx.quadraticCurveTo(cx + rx, cy - ry * 0.35, cx + rx, cy + 3);
+      ctx.quadraticCurveTo(cx + rx * 0.4, cy + ry * 1.45, cx - rx * 0.45, cy + ry * 1.1);
+      ctx.quadraticCurveTo(cx - rx * 0.9, cy + ry * 0.7, cx - rx, cy + 2);
+      ctx.closePath();
+      ctx.clip();
+
+      ctx.fillStyle = '#f4efe4';
+      ctx.fillRect(cx - rx - 4, cy - ry * 2, rx * 2 + 8, ry * 4);
+
+      // Iris, pushed high and to one side, partly under the lid
       ctx.fillStyle = '#4b3220';
-      ctx.beginPath(); ctx.arc(cx + glance, cy + 2, ry * 0.7, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#16100e';
-      ctx.beginPath(); ctx.arc(cx + glance, cy + 2, ry * 0.34, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath(); ctx.arc(cx + glance - ry * 0.26, cy - ry * 0.3, ry * 0.15, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + glance, cy, ry * 1.15, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#17110e';
+      ctx.beginPath(); ctx.arc(cx + glance, cy, ry * 0.55, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.beginPath(); ctx.arc(cx + glance - ry * 0.4, cy - ry * 0.45, ry * 0.22, 0, Math.PI * 2); ctx.fill();
 
-      // Lids: heavy on top, light underneath
+      // The upper lid's shadow falling across the top of the eye
+      ctx.fillStyle = 'rgba(60,38,28,0.34)';
+      ctx.fillRect(cx - rx - 4, cy - ry * 2, rx * 2 + 8, ry * 1.25);
+      ctx.restore();
+
+      // Heavy inked upper lid, thin lower
       ctx.strokeStyle = hex(C().ink); ctx.lineCap = 'round';
-      ctx.lineWidth = 5;
-      ctx.beginPath(); ctx.ellipse(cx, cy, P.eyeRx, ry, 0, Math.PI, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(cx - rx, cy + 2);
+      ctx.quadraticCurveTo(cx - rx * 0.3, cy - ry * 1.5, cx + rx * 0.55, cy - ry * 0.85);
+      ctx.quadraticCurveTo(cx + rx, cy - ry * 0.35, cx + rx, cy + 3);
+      ctx.stroke();
       ctx.lineWidth = 2.6;
-      ctx.beginPath(); ctx.ellipse(cx, cy, P.eyeRx, ry, 0, 0, Math.PI); ctx.stroke();
-    });
+      ctx.beginPath();
+      ctx.moveTo(cx + rx, cy + 3);
+      ctx.quadraticCurveTo(cx + rx * 0.4, cy + ry * 1.45, cx - rx * 0.45, cy + ry * 1.1);
+      ctx.quadraticCurveTo(cx - rx * 0.9, cy + ry * 0.7, cx - rx, cy + 2);
+      ctx.stroke();
 
-    // Tired lines under the eyes
-    ctx.strokeStyle = 'rgba(20,16,19,0.3)';
-    [-1, 1].forEach((s) => {
-      const cx = P.cx + s * P.eyeDx;
-      PP.U.inkLine(ctx, cx - 36, P.eyeY + ry + 16, cx + 36, P.eyeY + ry + 14, 2.4, 0.7);
+      // Hood crease above the lid
+      ctx.strokeStyle = 'rgba(40,26,20,0.5)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(cx - rx * 0.85, cy - ry * 1.9);
+      ctx.quadraticCurveTo(cx, cy - ry * 3.0, cx + rx * 0.95, cy - ry * 1.5);
+      ctx.stroke();
+
+      // Bags: two soft lines under each eye
+      ctx.strokeStyle = 'rgba(120,70,52,0.45)';
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.moveTo(cx - rx * 0.8, cy + ry * 2.0);
+      ctx.quadraticCurveTo(cx, cy + ry * 3.1, cx + rx * 0.85, cy + ry * 1.9);
+      ctx.stroke();
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(cx - rx * 0.6, cy + ry * 3.0);
+      ctx.quadraticCurveTo(cx, cy + ry * 3.9, cx + rx * 0.7, cy + ry * 2.8);
+      ctx.stroke();
+
+      // Crow's feet at the outer corner
+      ctx.strokeStyle = 'rgba(60,38,28,0.35)';
+      ctx.lineWidth = 2;
+      for (let k = -1; k <= 1; k++) {
+        ctx.beginPath();
+        ctx.moveTo(cx + s2 * rx * 1.02, cy + k * 7);
+        ctx.lineTo(cx + s2 * (rx * 1.02 + 20), cy + k * 13 - 2);
+        ctx.stroke();
+      }
     });
   }
 
   function nose(ctx) {
     ctx.strokeStyle = hex(C().ink);
     ctx.lineCap = 'round';
-    ctx.lineWidth = 3.6;
+    ctx.lineWidth = 4.6;
     // Bridge down the viewer's left, as in the reference's three-quarter look
     ctx.beginPath();
     ctx.moveTo(P.cx - 6, P.noseTop);
     ctx.quadraticCurveTo(P.cx - 26, P.noseTip - 22, P.cx - 12, P.noseTip);
     ctx.stroke();
     // Tip and the near nostril wing
-    ctx.lineWidth = 3.2;
+    ctx.lineWidth = 4.2;
     ctx.beginPath();
     ctx.moveTo(P.cx - 12, P.noseTip);
     ctx.quadraticCurveTo(P.cx + 8, P.noseTip + 10, P.cx + 26, P.noseTip - 6);
     ctx.stroke();
     ctx.fillStyle = 'rgba(20,16,19,0.72)';
-    ctx.beginPath(); ctx.ellipse(P.cx - 22, P.noseTip, 9, 5.5, -0.28, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(P.cx + 20, P.noseTip - 4, 8, 5, 0.28, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(P.cx - 24, P.noseTip, 11, 6.5, -0.28, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(P.cx + 22, P.noseTip - 4, 10, 6, 0.28, 0, Math.PI * 2); ctx.fill();
   }
 
   function mouth(ctx, mode) {
