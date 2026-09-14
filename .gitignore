@@ -1,0 +1,16 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Node (not used at runtime — no build step — but keep it clean)
+node_modules/
+package-lock.json
+
+# Local scratch
+*.log
+tmp/

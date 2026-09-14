@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Petia Petty</title>
+<meta name="description" content="An endless runner. You are being chased by a giant pair of clippers. Your hair is the health bar.">
+<meta name="theme-color" content="#f4efe4">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23f4efe4'/%3E%3Crect x='20' y='18' width='24' height='30' rx='4' fill='%23d8dde3' stroke='%23141013' stroke-width='4'/%3E%3Crect x='17' y='8' width='30' height='9' rx='2' fill='%23f2f4f6' stroke='%23141013' stroke-width='4'/%3E%3Cpath d='M20 8v-4M27 8v-4M34 8v-4M41 8v-4' stroke='%23141013' stroke-width='3'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --paper:#f4efe4;
+    --ink:#141013;
+    --maroon:#7c2f42;
+    --marker:#f5c518;
+    --red:#d94a4a;
+    --blue:#4fb0e0;
+    --green:#57c98a;
+    --sans:"Trebuchet MS","Segoe UI",Roboto,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;overflow:hidden;background:var(--paper);}
+  body{
+    font-family:var(--sans);
+    color:var(--ink);
+    -webkit-user-select:none;user-select:none;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:none;
+  }
+  #game{position:fixed;inset:0;}
+  canvas{display:block;}
+
+  /* ---- paper grain + vignette over the whole scene ---------------------- */
+  #grain{
+    position:fixed;inset:0;pointer-events:none;z-index:2;
+    opacity:.5;mix-blend-mode:multiply;
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(0,0,0,.05) 0 1px, transparent 1px),
+      radial-gradient(circle at 70% 60%, rgba(0,0,0,.04) 0 1px, transparent 1px),
+      radial-gradient(circle at 45% 85%, rgba(0,0,0,.05) 0 1px, transparent 1px);
+    background-size:7px 7px, 11px 11px, 9px 9px;
+  }
+  #vignette{
+    position:fixed;inset:0;pointer-events:none;z-index:3;
+    background:radial-gradient(ellipse at center, transparent 52%, rgba(20,16,19,.28) 100%);
+  }
+  #flash{
+    position:fixed;inset:0;pointer-events:none;z-index:6;opacity:0;background:transparent;
+  }
+  #flash.on{animation:flash .34s ease-out;}
+  @keyframes flash{from{opacity:1}to{opacity:0}}
+
+  /* ---- HUD -------------------------------------------------------------- */
+  #hud{
+    position:fixed;inset:0;z-index:5;pointer-events:none;
+    opacity:0;transition:opacity .25s;
+    padding:max(14px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right))
+            max(14px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  }
+  #hud.on{opacity:1}
+  .hud-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;}
+
+  .score-wrap{display:flex;flex-direction:column;gap:2px;}
+  #score{
+    font-size:clamp(30px,7vw,52px);font-weight:900;line-height:.95;
+    letter-spacing:-1px;
+    -webkit-text-stroke:2.5px var(--ink);
+    paint-order:stroke fill;color:#fff;
+  }
+  #dist{font-size:clamp(12px,3vw,16px);font-weight:800;opacity:.72;letter-spacing:.5px;}
+  #combo{
+    font-size:clamp(16px,4vw,24px);font-weight:900;color:var(--maroon);
+    opacity:0;transform:scale(.7);transition:.15s;
+  }
+  #combo.on{opacity:1;transform:scale(1);}
+
+  .right-col{display:flex;flex-direction:column;align-items:flex-end;gap:8px;}
+  .hud-btns{display:flex;gap:8px;pointer-events:auto;}
+  .icon-btn{
+    width:40px;height:40px;border-radius:50%;
+    border:2.5px solid var(--ink);background:var(--paper);
+    font-size:17px;line-height:1;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:2px 2px 0 var(--ink);
+  }
+  .icon-btn:active{transform:translate(2px,2px);box-shadow:none;}
+
+  /* Hair meter = health */
+  #hairWrap{display:flex;flex-direction:column;align-items:flex-end;gap:4px;}
+  .hair-label{font-size:10px;font-weight:900;letter-spacing:1.5px;opacity:.6;}
+  #hair{display:flex;gap:5px;}
+  .tuft{
+    width:26px;height:16px;background:#2c1d18;
+    border:2.5px solid var(--ink);
+    border-radius:13px 13px 3px 3px;
+    transition:.2s;
+  }
+  .tuft.gone{background:#e8d9c6;opacity:.45;transform:scaleY(.35);}
+
+  /* Chase meter */
+  #menace{
+    position:absolute;left:50%;transform:translateX(-50%);
+    bottom:max(16px, env(safe-area-inset-bottom));
+    width:min(46vw,260px);
+  }
+  .menace-label{
+    font-size:10px;font-weight:900;letter-spacing:1.5px;
+    text-align:center;opacity:.6;margin-bottom:4px;
+  }
+  .menace-track{
+    height:11px;border:2.5px solid var(--ink);border-radius:7px;
+    background:var(--paper);overflow:hidden;
+  }
+  #menaceFill{
+    height:100%;width:0%;
+    background:repeating-linear-gradient(45deg,var(--red) 0 6px,#b33 6px 12px);
+    transition:width .12s linear;
+  }
+  #hud.danger #menaceFill{animation:pulse .28s infinite alternate;}
+  @keyframes pulse{from{filter:brightness(1)}to{filter:brightness(1.6)}}
+  #hud.danger #score{color:#ffe0e0;}
+
+  /* Toast */
+  .toast{
+    position:absolute;left:50%;top:26%;transform:translate(-50%,0) scale(.8);
+    font-size:clamp(15px,4.4vw,26px);font-weight:900;letter-spacing:.5px;
+    -webkit-text-stroke:2.5px var(--ink);paint-order:stroke fill;color:#fff;
+    opacity:0;white-space:nowrap;
+  }
+  .toast.show{animation:toast 1.05s ease-out;}
+  .toast.bad{color:#ffd9d9;}
+  .toast.good{color:#d9ffe9;}
+  @keyframes toast{
+    0%{opacity:0;transform:translate(-50%,10px) scale(.7)}
+    18%{opacity:1;transform:translate(-50%,-6px) scale(1.06)}
+    30%{transform:translate(-50%,0) scale(1)}
+    75%{opacity:1}
+    100%{opacity:0;transform:translate(-50%,-24px) scale(1)}
+  }
+
+  /* ---- Screens ---------------------------------------------------------- */
+  .screen{
+    position:fixed;inset:0;z-index:7;
+    display:none;flex-direction:column;align-items:center;justify-content:center;
+    padding:24px;text-align:center;
+    background:rgba(244,239,228,.86);
+    backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+  }
+  .screen.on{display:flex;}
+
+  .logo{
+    font-size:clamp(44px,13vw,104px);font-weight:900;line-height:.82;
+    letter-spacing:-2px;text-transform:uppercase;
+    -webkit-text-stroke:clamp(3px,1vw,7px) var(--ink);
+    paint-order:stroke fill;color:var(--maroon);
+    transform:rotate(-2.5deg);
+    text-shadow:6px 7px 0 var(--marker);
+    margin:0;
+  }
+  .logo span{display:block;}
+  .logo .two{color:var(--marker);text-shadow:6px 7px 0 var(--maroon);margin-top:-.06em;}
+
+  .tagline{
+    margin:18px 0 4px;font-size:clamp(13px,3.6vw,18px);font-weight:800;
+    max-width:30ch;line-height:1.45;
+  }
+  .sub{font-size:clamp(11px,3vw,14px);opacity:.7;font-weight:700;max-width:34ch;line-height:1.5;}
+
+  .btn{
+    margin-top:22px;padding:14px 40px;
+    font-family:inherit;font-size:clamp(16px,4.4vw,21px);font-weight:900;letter-spacing:1px;
+    text-transform:uppercase;cursor:pointer;
+    background:var(--marker);color:var(--ink);
+    border:3.5px solid var(--ink);border-radius:999px;
+    box-shadow:5px 6px 0 var(--ink);
+    transition:transform .08s, box-shadow .08s;
+  }
+  .btn:hover{transform:translate(-1px,-1px);box-shadow:6px 7px 0 var(--ink);}
+  .btn:active{transform:translate(5px,6px);box-shadow:0 0 0 var(--ink);}
+
+  .controls{
+    margin-top:26px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center;
+    max-width:440px;
+  }
+  .key{
+    display:flex;align-items:center;gap:7px;
+    font-size:11px;font-weight:800;letter-spacing:.4px;
+    border:2.5px solid var(--ink);border-radius:10px;
+    padding:7px 11px;background:var(--paper);
+    box-shadow:2px 3px 0 var(--ink);
+  }
+  .key b{
+    background:var(--ink);color:var(--paper);
+    border-radius:5px;padding:2px 7px;font-size:11px;
+  }
+  .key i{font-style:normal;opacity:.5;font-size:10px;font-weight:700;}
+  .touch-only{display:none}
+  @media (hover:none) and (pointer:coarse){
+    .touch-only{display:flex}
+    .mouse-only{display:none}
+  }
+
+  .best-line{
+    margin-top:18px;font-size:12px;font-weight:900;letter-spacing:2px;opacity:.65;
+  }
+  .best-line b{font-size:17px;letter-spacing:0;}
+
+  /* Game over */
+  .over-title{
+    font-size:clamp(38px,11vw,86px);font-weight:900;line-height:.85;
+    text-transform:uppercase;letter-spacing:-2px;
+    -webkit-text-stroke:clamp(3px,.9vw,6px) var(--ink);
+    paint-order:stroke fill;color:var(--red);
+    text-shadow:5px 6px 0 var(--ink);
+    transform:rotate(-2deg);margin:0 0 6px;
+  }
+  #deathLine{
+    font-size:clamp(13px,3.6vw,18px);font-weight:800;font-style:italic;
+    max-width:26ch;line-height:1.4;margin:10px 0 4px;
+  }
+  .stats{
+    display:flex;gap:clamp(16px,6vw,42px);margin:22px 0 2px;flex-wrap:wrap;justify-content:center;
+  }
+  .stat{display:flex;flex-direction:column;gap:2px;}
+  .stat .v{
+    font-size:clamp(26px,7vw,44px);font-weight:900;line-height:1;
+    -webkit-text-stroke:2.5px var(--ink);paint-order:stroke fill;color:#fff;
+  }
+  .stat .k{font-size:10px;font-weight:900;letter-spacing:1.6px;opacity:.6;}
+  #newBest{
+    display:none;margin-top:10px;padding:5px 16px;
+    background:var(--marker);border:2.5px solid var(--ink);border-radius:999px;
+    font-size:12px;font-weight:900;letter-spacing:1.4px;
+    box-shadow:3px 3px 0 var(--ink);transform:rotate(-2deg);
+  }
+  #newBest.on{display:block;}
+
+  .credit{
+    position:fixed;bottom:10px;left:0;right:0;text-align:center;
+    font-size:10px;font-weight:700;letter-spacing:1px;opacity:.4;z-index:8;
+  }
+  @media (max-height:520px){
+    .controls{display:none}
+    .tagline{margin:10px 0 2px}
+    .credit{display:none}
+  }
+</style>
+</head>
+<body>
+
+<div id="game"></div>
+<div id="grain"></div>
+<div id="vignette"></div>
+<div id="flash"></div>
+
+<!-- ---------------------------------------------------------------- HUD -->
+<div id="hud">
+  <div class="hud-row">
+    <div class="score-wrap">
+      <div id="score">0</div>
+      <div id="dist">0m</div>
+      <div id="combo"></div>
+    </div>
+    <div class="right-col">
+      <div class="hud-btns">
+        <button class="icon-btn" id="muteBtn" aria-label="Mute" aria-pressed="false">🔊</button>
+        <button class="icon-btn" id="pauseBtn" aria-label="Pause">⏸</button>
+      </div>
+      <div id="hairWrap">
+        <div class="hair-label">HAIR</div>
+        <div id="hair"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="menace">
+    <div class="menace-label">CLIPPERS</div>
+    <div class="menace-track"><div id="menaceFill"></div></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<!-- ------------------------------------------------------------- Title -->
+<div class="screen on" id="screenTitle">
+  <h1 class="logo"><span>Petia</span><span class="two">Petty</span></h1>
+  <p class="tagline">A giant pair of clippers wants your hairline. It already has a head start.</p>
+  <p class="sub">Collect hair to score. Dodge everything. Every hit lets them gain — and when they
+     catch you, they take a little off the top.</p>
+  <button class="btn" data-action="play">Run</button>
+  <div class="best-line">BEST <b id="bestTitle">—</b></div>
+  <p class="sub" style="margin-top:14px;font-weight:900;letter-spacing:.5px;">
+     Keyboard: <b>W</b> jump &nbsp;<b>A</b>/<b>D</b> lanes &nbsp;<b>S</b> slide</p>
+
+  <div class="controls">
+    <div class="key mouse-only"><b>A</b> <b>D</b> Lanes <i>or ← →</i></div>
+    <div class="key mouse-only"><b>W</b> Jump <i>or ↑ / Space</i></div>
+    <div class="key mouse-only"><b>S</b> Slide <i>or ↓</i></div>
+    <div class="key mouse-only"><b>P</b> Pause</div>
+    <div class="key mouse-only"><b>M</b> Mute</div>
+    <div class="key touch-only"><b>Swipe ←→</b> Lanes</div>
+    <div class="key touch-only"><b>Swipe ↑</b> Jump</div>
+    <div class="key touch-only"><b>Swipe ↓</b> Slide</div>
+  </div>
+</div>
+
+<!-- ------------------------------------------------------------- Pause -->
+<div class="screen" id="screenPause">
+  <h1 class="logo"><span>Paused</span></h1>
+  <p class="sub">The clippers are idling. They can wait.</p>
+  <button class="btn" data-action="resume">Resume</button>
+</div>
+
+<!-- --------------------------------------------------------- Game over -->
+<div class="screen" id="screenOver">
+  <h1 class="over-title">Clipped</h1>
+  <p id="deathLine"></p>
+  <div class="stats">
+    <div class="stat"><div class="v" id="finalScore">0</div><div class="k">SCORE</div></div>
+    <div class="stat"><div class="v" id="finalDist">0m</div><div class="k">DISTANCE</div></div>
+    <div class="stat"><div class="v" id="finalBest">0</div><div class="k">BEST</div></div>
+  </div>
+  <div id="newBest">NEW PERSONAL BEST</div>
+  <button class="btn" data-action="play">Run again</button>
+</div>
+
+<div class="credit">PETIA PETTY</div>
+
+<script src="vendor/three.min.js"></script>
+<script src="src/config.js"></script>
+<script src="src/utils.js"></script>
+<script src="src/audio.js"></script>
+<script src="src/face.js"></script>
+<script src="src/player.js"></script>
+<script src="src/clippers.js"></script>
+<script src="src/world.js"></script>
+<script src="src/ui.js"></script>
+<script src="src/game.js"></script>
+</body>
+</html>
