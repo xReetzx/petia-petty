@@ -334,7 +334,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
   console.log('\n=== HEAD AND ARMS ===');
   const head = await page.evaluate('window.__PP_DEBUG.headInfo()');
-  ok(head.materials === 1 && head.geometry === 'SphereGeometry',
+  ok(head.materials === 1 && head.geometry === 'BoxGeometry',
     'head is one mesh under one texture (' + head.geometry + ', ' +
     head.materials + ' material)');
 

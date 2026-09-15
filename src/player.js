@@ -97,52 +97,73 @@ PP.Player = (function () {
     chest.add(head);
     this.head = head;
 
-    /* One head, one surface, one texture.
+    /* One head, one texture — but a box.
      *
-     * This was a BoxGeometry with six materials: a portrait on the front, a
-     * closer crop of the same portrait on both sides, and a flat brown slab
-     * at the back. Three unrelated images at three scales meeting at hard
-     * corners — which is exactly what "stitched together" looks like.
+     * It was a box with SIX materials once: a portrait on the front, a closer
+     * crop of the same portrait on both sides, a flat slab at the back. Three
+     * unrelated pictures meeting at hard corners, which is what "stitched
+     * together" meant. Briefly it became a sphere, which fixed that but lost
+     * the square silhouette — and the square is the right call here.
      *
-     * A scaled sphere is the right primitive. It is closed, so the
-     * inverted-hull outline still works (open geometry renders its black
-     * interior — see CLAUDE.md), and its UVs are already equirectangular,
-     * which is the projection a head wrap needs.
+     * So: box geometry, one wrapped texture, and custom UVs that give the four
+     * side faces CONTIGUOUS quarter-slices of it. The painting runs round the
+     * head continuously and simply creases at the corners instead of jumping.
+     *
+     * Each of the four faces has its `u` already running in the same direction
+     * as you walk around the head, so the slices join without any flipping.
+     * The back face straddles the wrap's own seam, which is why its slice runs
+     * past 1.0 and why the map wraps.
      */
-    const skullGeo = new THREE.SphereGeometry(PP.CFG.HEAD_R, 28, 20);
-    /* Unlit, unlike everything else on him.
+    const skullGeo = new THREE.BoxGeometry(
+      PP.CFG.HEAD_W, PP.CFG.HEAD_H, PP.CFG.HEAD_D);
+    (function sliceUVs() {
+      const uv = skullGeo.attributes.uv;
+      // BoxGeometry face order: +X, -X, +Y, -Y, +Z, -Z, four vertices each.
+      const slice = [
+        [0.125, 0.375],   // +X  his right
+        [0.625, 0.875],   // -X  his left
+        null,             // +Y  crown
+        null,             // -Y  under the chin
+        [0.875, 1.125],   // +Z  back, straddling the seam
+        [0.375, 0.625]    // -Z  front, his face
+      ];
+      const V0 = PP.CFG.HEAD_BAND[0], V1 = PP.CFG.HEAD_BAND[1];
+      for (let f = 0; f < 6; f++) {
+        for (let i = 0; i < 4; i++) {
+          const k = f * 4 + i;
+          const u = uv.getX(k), v = uv.getY(k);
+          if (slice[f]) {
+            uv.setXY(k, slice[f][0] + u * (slice[f][1] - slice[f][0]), V0 + v * (V1 - V0));
+          } else {
+            // Crown and chin take a flat patch from a reserved sliver, painted
+            // one solid colour, so nothing can bleed into them.
+            const base = f === 2 ? 1 - PP.CFG.HEAD_SLIVER * 0.7 : PP.CFG.HEAD_SLIVER * 0.3;
+            uv.setXY(k, 0.45 + u * 0.10, base + v * PP.CFG.HEAD_SLIVER * 0.3);
+          }
+        }
+      }
+      uv.needsUpdate = true;
+    })();
+
+    /* Unlit, unlike the rest of him.
      *
-     * The body is MeshToonMaterial with a 3-step gradient, which on flat box
-     * faces reads as clean cel shading. On a sphere the same gradient puts a
-     * hard terminator band across the curve — and on a head that band falls
-     * straight down his face and cuts it in half. The wrap is a drawing that
-     * already carries its own light and shadow, so the right answer is not to
-     * light it twice: his face then reads identically from every angle, which
-     * for the one part of him the player is looking at is what you want.
+     * With toon shading each box face gets its own flat tone, so every corner
+     * becomes a tonal step — which was half of what read as stitched. The wrap
+     * is a drawing that already carries its own light and shadow, so lighting
+     * it twice is what caused the problem rather than solving it. It also
+     * means his face reads identically from every angle, which for the one
+     * part of him the player looks at is what you want.
      */
     const skull = new THREE.Mesh(skullGeo, new THREE.MeshBasicMaterial({
       map: PP.Face.headWrap()
     }));
-    skull.scale.set.apply(skull.scale, PP.CFG.HEAD_SCALE);
     U_.outline(skull, 0.06);
     head.add(skull);
     this.skull = skull;
     this.faceMat = skull.material;
 
-    /* No separate ears.
-     *
-     * There used to be a sphere on each side sitting on top of an ear that
-     * was already drawn into the side texture, so he had two of each. The
-     * wrap paints them now, in the right place, at the right scale.
-     */
-
-    /* No 3D beard any more.
-     *
-     * The cluster of spheres here existed because the face was painted flat on
-     * one side of a box and needed framing. His face is now the reference
-     * illustration itself, beard and all, so geometry on top of it only
-     * competes with the drawing. The sides and back of the head carry beard in
-     * their own textures, toned from the same sampled palette.
+    /* No separate ears: the wrap paints the one the artwork does not carry.
+     * Sphere ears sitting on top of drawn ones is what the old head did.
      */
 
     /* Hair lives on the head so it follows the look-back twist.

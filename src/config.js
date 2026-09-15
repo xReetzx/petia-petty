@@ -75,31 +75,28 @@ PP.CFG = {
    * each face. Smaller than it was: it used to be about as wide as his torso,
    * which magnified every seam and read as a bobblehead.
    */
-  HEAD_R: 0.40,
-  HEAD_SCALE: [0.92, 1.02, 1.00],   // width, height, depth multipliers
-                                    // (a head is deeper than it is wide)
-  HEAD_Y: 2.18,
-  // Where the artwork lands on the wrap. Degrees of longitude it spans, and
-  // the band of the canvas it occupies.
-  /* The wrap is equirectangular, so the vertical band is a polar angle: 0 is
-   * the crown and 1 is directly under the chin. His brow sits around a third
-   * of the way down the skull and his chin around six sevenths.
+  /* The skull is a box again — square reads better for this character than a
+   * sphere did — but still one texture, not six pictures. The four side faces
+   * take contiguous quarter-slices of the wrap; see player.js.
    */
-  FACE_SPAN: 186,
-  FACE_TOP: 0.33,
-  FACE_HEIGHT: 0.52,
-  HAIR_SCALE: 0.92,              // hair was placed against the old bigger head
-  HAIR_LIFT: 0.0,
-  /* The illustration is a three-quarter view — his drawn head is turned about
-   * twenty degrees toward his right. Pasted straight onto the front of a
-   * forward-facing head that became a permanent sideways glance, which is
-   * what "his face looks backwards from his body" was. Rotating the geometry
-   * to compensate would read as a head put on crooked, so instead the artwork
-   * is composited a little further round the wrap and the silhouette stays
-   * square to his shoulders. His eyes still cut to his right, which is the
-   * side the clippers hunt from, so he reads as watching them.
+  HEAD_W: 0.76,
+  HEAD_H: 0.84,
+  HEAD_D: 0.72,
+  HEAD_Y: 2.26,
+  // The vertical band of the wrap the side faces use, leaving a sliver at each
+  // end for the crown and the underside of the chin.
+  HEAD_SLIVER: 0.04,
+  HEAD_BAND: [0.04, 0.96],
+
+  /* Where the artwork lands on the wrap. The wrap is now a plain unrolled
+   * band, so these are simple fractions: degrees of the way round the head,
+   * and fractions of its height.
    */
-  FACE_YAW_FIX: 22,
+  FACE_SPAN: 104,
+  FACE_TOP: 0.09,
+  FACE_HEIGHT: 0.80,
+  HAIR_SCALE: 0.98,              // hair was placed against the old bigger head
+  HAIR_LIFT: 0.02,
 
   // ---- Collision ----------------------------------------------------------
   PLAYER_RADIUS: 0.52,

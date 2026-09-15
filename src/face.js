@@ -662,33 +662,29 @@ PP.Face = (function () {
    * does not care that its pixels changed.
    */
 
-  /* ---- The head, as one continuous surface ------------------------------
+  /* ---- The head, as one continuous painting ------------------------------
    *
    * The head used to be a box with a different picture on each of its six
    * faces: a three-quarter portrait on the front, a closer crop of that SAME
    * portrait on both sides (so he had a face on each side of his head), and a
-   * flat brown slab at the back with none of the illustration's ink in it.
-   * They met at hard 90-degree corners where tone, scale and line weight all
-   * jumped at once. That is what "stitched together" was, and no amount of
-   * re-cropping fixes it while the geometry is a cube.
+   * flat brown slab at the back. They met at hard 90-degree corners where
+   * tone, scale and line weight all jumped at once. That is what "stitched
+   * together" was, and no amount of re-cropping fixes it while each face
+   * carries a different image.
    *
-   * So: one rounded mesh, one texture, painted all the way round.
+   * It is still a box — square reads better for this character — but now there
+   * is ONE painting, and `player.js` gives the four side faces contiguous
+   * quarter-slices of it. The painting runs round the head continuously and
+   * merely creases at the corners.
    *
-   * The canvas is equirectangular, which is exactly what a UV sphere wants.
-   * `x` runs around the head and `y` from crown to chin. The face artwork is
-   * composited into the middle through a soft elliptical mask, so instead of
-   * ending at a rectangle its edges dissolve into skin that carries on around
-   * the sides and joins itself at the back.
+   * The canvas is a plain unrolled band: `x` runs around the head, `y` from
+   * the crown down to under the chin, both linear. A sliver is reserved at the
+   * top and bottom for the crown and chin faces, painted flat so nothing can
+   * bleed into them.
    *
-   * Two mapping facts this depends on, both verified against the render
-   * rather than assumed:
-   *
-   *  - A default THREE.SphereGeometry puts u = 0 at -X, so the UV seam would
-   *    land on his left cheek. `player.js` shifts the map by -0.25 to move it
-   *    to the back of his head, which also lands the canvas centre on his
-   *    face. Change one without the other and the seam crosses his nose.
-   *  - Canvas x increasing appears to move RIGHT when you are looking at his
-   *    face, so the artwork goes on unmirrored.
+   * One rule this depends on: **nothing painted may have a straight vertical
+   * edge**, because on a box those land exactly on a corner and read as a
+   * join. The nape is a cosine falloff across the full width for that reason.
    */
   const WRAP_W = 1024, WRAP_H = 512;
 
@@ -819,7 +815,7 @@ PP.Face = (function () {
     // --- the artwork --------------------------------------------------------
     const fw = (PP.CFG.FACE_SPAN / 360) * W;
     const fh = H * PP.CFG.FACE_HEIGHT;
-    const fx = lonX(PP.CFG.FACE_YAW_FIX) - fw / 2;
+    const fx = lonX(0) - fw / 2;   // dead centre of the front face
     const fy = H * PP.CFG.FACE_TOP;
 
     // Mask on its own canvas: compositing the feather directly onto the wrap
@@ -854,6 +850,18 @@ PP.Face = (function () {
     // A wash of the illustration's ink over everything, so the painted parts
     // and the drawn parts sit in the same medium.
     PP.U.hatch(ctx, 0, 0, W, H, 28, Math.PI / 4, 0.03, hex(c.ink));
+
+    /* Reserved slivers for the crown and chin faces of the box.
+     *
+     * Painted flat and painted LAST, so whatever ran off the top or bottom of
+     * the band cannot show up on them. The crown is under the hair anyway; the
+     * underside of a chin is in shadow.
+     */
+    const sliver = H * PP.CFG.HEAD_SLIVER;
+    ctx.fillStyle = hex(c.hair);
+    ctx.fillRect(0, 0, W, sliver);
+    ctx.fillStyle = '#3a241c';
+    ctx.fillRect(0, H - sliver, W, sliver);
   }
 
   let wrapCv = null, wrapTex = null, wrapStarted = false;
@@ -864,10 +872,9 @@ PP.Face = (function () {
       paintWrap(wrapCv.getContext('2d'), null);
       wrapTex = new THREE.CanvasTexture(wrapCv);
       wrapTex.anisotropy = 4;
+      // The back face's slice runs past 1.0 so that the wrap's own seam sits in
+      // the middle of it, hidden at the back of his skull.
       wrapTex.wrapS = THREE.RepeatWrapping;
-      // Move the UV seam off his cheek and onto the back of his head. This
-      // also lands the canvas centre on his face — see the note above.
-      wrapTex.offset.x = -0.25;
     }
     /* Decoding is asynchronous, so hand back one texture object immediately
      * and repaint into the same canvas when the image arrives. Returning the

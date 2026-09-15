@@ -12,6 +12,7 @@ canvas work. Embedding it as a data URI sidesteps loading entirely.
 """
 import base64
 import io
+import math
 import os
 import sys
 from PIL import Image
@@ -40,6 +41,36 @@ CHROME_BOTTOM = 2300      # above the lower bar
 # mechanic the whole game is built on.
 FACE = (112, 990, 1112, 1990)
 
+# --- Straightening the three-quarter view ---------------------------------
+#
+# The illustration is drawn with his head turned. Pasted onto the front of a
+# forward-facing skull that becomes a permanent sideways glance — "his face is
+# angled, we need it head on with his body".
+#
+# There is no head-on face in the source to swap to, so the drawing is
+# re-projected instead. Model the drawn head as a cylinder: a feature at true
+# angle θ from the centreline appears at sin(θ + α), and in a head-on image it
+# belongs at sin(θ). Sampling the source at sin(asin(x) + α) for each output
+# column therefore rotates the face back.
+#
+# These three are measured off the artwork as fractions of the FACE crop's
+# width, so the turn is derived from a landmark rather than being a magic
+# angle — re-crop and only these move.
+# Measured on a percent grid over the crop: his head's ink outline runs from
+# 4% to 93% (the right edge being his ear), and his pupils sit at 9% and 43%,
+# so his plane of symmetry projects at 26%. The midpoint between his pupils is
+# used rather than his nose, because a nose in three-quarter view projects
+# toward the turned side and would overstate the angle.
+FACE_AXIS = 0.485         # where his head's centreline would be, unturned
+FACE_RADIUS = 0.445       # his head's half-width
+FACE_CENTRELINE = 0.260   # where it actually projects, which gives the turn
+
+# How much of that turn to undo. 1.0 is geometrically dead-on but stretches his
+# far cheek by about 60% to fill the space it should occupy, which visibly
+# widens one eye against the other. Half straightens him convincingly with
+# nothing smeared.
+FACE_STRAIGHTEN = 0.5
+
 # No SIDE crop any more.
 #
 # The head used to be a box with a different picture on each face, and the
@@ -48,6 +79,51 @@ FACE = (112, 990, 1112, 1990)
 # and meeting the front at a hard 90-degree corner. The head is now one
 # rounded mesh under one wrapped texture, and face.js paints the sides to
 # match, so there is nothing for a second crop to do.
+
+
+def straighten(img, strength):
+    """Rotate a three-quarter face toward head-on by re-projecting it.
+
+    Treats the drawn head as a cylinder seen turned by α and samples the source
+    at sin(asin(x) + α·strength). Recentring comes free: at θ = 0 his nose
+    lands on the axis, which is the centre of the head — provided FACE_AXIS is
+    the head's centreline and not the crop's midpoint. Get that wrong and the
+    whole face slides sideways instead of turning.
+
+    Done with a strip mesh rather than per-pixel because there is no numpy
+    here; the mapping is monotone and horizontal, so axis-aligned strips with
+    bicubic resampling reproduce it closely.
+    """
+    W, H = img.size
+    axis, R = FACE_AXIS * W, FACE_RADIUS * W
+    # The turn, read off where his nose sits relative to the centreline
+    alpha = math.asin(max(-1.0, min(1.0, (FACE_CENTRELINE * W - axis) / R))) * strength
+    if abs(alpha) < 1e-6:
+        return img
+
+    def src_x(x_out):
+        u = max(-1.0, min(1.0, (x_out - axis) / R))
+        ang = math.asin(u) + alpha
+        # Clamp the ANGLE, not just the position. Past +-90 degrees the output
+        # column is asking for part of the head that was hidden behind the
+        # silhouette in a turned drawing — there is no data for it. Without
+        # this the sine folds back and the mapping stops being monotone, which
+        # drags background in from outside his head and smears it across the
+        # edge of his face.
+        ang = max(-math.pi / 2, min(math.pi / 2, ang))
+        return axis + R * math.sin(ang)
+
+    STRIPS = 96
+    mesh = []
+    for i in range(STRIPS):
+        xa = W * i / STRIPS
+        xb = W * (i + 1) / STRIPS
+        sa, sb = src_x(xa), src_x(xb)
+        mesh.append((
+            (int(round(xa)), 0, int(round(xb)), H),
+            (sa, 0, sa, H, sb, H, sb, 0)
+        ))
+    return img.transform((W, H), Image.MESH, mesh, Image.BICUBIC)
 
 
 def data_uri(img, fmt, quality=None):
@@ -72,6 +148,9 @@ def main():
     if (x1 - x0) != (y1 - y0):
         sys.exit('FACE must be square so the artwork is not stretched')
     face = im.crop((max(0, x0), max(0, y0), min(im.width, x1), min(im.height, y1)))
+    # Straighten at full crop resolution, then downsample — the other way round
+    # resamples twice and softens his linework.
+    face = straighten(face, float(os.environ.get('STRAIGHTEN', FACE_STRAIGHTEN)))
     face = face.resize((640, 640), Image.LANCZOS)
     face_uri, face_bytes = data_uri(face, 'JPEG', 88)
 

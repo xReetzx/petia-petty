@@ -159,40 +159,67 @@ Two things follow from the artwork being a real image:
 The hand-drawn face in `src/face.js` is kept as the fallback and for roster
 slots with no artwork. `PP.Face.drawn()` reaches it directly.
 
-### The head is one surface, not six
+### The head is one painting, not six pictures
 
 It used to be a `BoxGeometry` with six materials: a three-quarter portrait on
 the front, a closer crop of that *same* portrait on both sides — so he had a
-face on each side of his head — and a flat brown slab at the back with none of
-the illustration's ink in it. Three unrelated images at three scales meeting at
-hard 90° corners, where tone, scale and line weight all jumped at once. That is
-what "stitched together" looks like, and no re-cropping fixes it while the
-geometry is a cube.
+face on each side of his head — and a flat brown slab at the back. Three
+unrelated images at three scales meeting at hard 90° corners, where tone, scale
+and line weight all jumped at once. That is what "stitched together" meant.
 
-It is now **one scaled sphere under one wrapped texture**, built by
-`PP.Face.headWrap()`. Things that depend on each other here:
+It is **still a box** (square reads better for this character than a sphere did,
+which was tried and rejected), but now there is **one wrapped texture** built by
+`PP.Face.headWrap()`, and `player.js` rewrites the box's `uv` attribute so the
+four side faces take **contiguous quarter-slices** of it. The painting runs
+round the head continuously and merely creases at the corners.
 
-- **The wrap is equirectangular**, which is what a UV sphere wants. Canvas `x`
-  runs around the head, `y` from crown to chin. `FACE_TOP`/`FACE_HEIGHT` in
-  `config.js` are therefore *polar angles*, not a pixel box.
-- **A default sphere puts `u = 0` at `-X`**, so the UV seam would land on his
-  left cheek. `headWrap` sets `offset.x = -0.25` to move it to the back of his
-  skull, which also lands the canvas centre on his face. Change one without the
-  other and the seam crosses his nose.
-- **The head is unlit** (`MeshBasicMaterial`) while the body is toon-shaded. A
-  3-step gradient on flat box faces is clean cel shading; on a sphere it puts a
-  hard terminator band across the curve, and on a head that band cuts his face
-  in half. The wrap is a drawing that already carries its own light.
-- **The artwork is a three-quarter view** — his drawn head is turned about 20°.
-  `FACE_YAW_FIX` composites it that bit further round the wrap so his gaze ends
-  up down the street, rather than rotating the geometry, which reads as a head
-  put on crooked. His eyes still cut to his right, which is the side the
-  clippers hunt from.
-- **Nothing painted may have a straight vertical edge.** A vertical line on an
-  equirectangular wrap becomes a hard line down the side of his skull; the nape
-  is a cosine falloff across the full width for exactly this reason.
+Things that depend on each other here:
 
-### Limb signs
+- **The wrap is a plain unrolled band** — `x` around the head, `y` from crown to
+  chin, both linear. `FACE_TOP`/`FACE_HEIGHT` and `HEAD_BAND` are simple
+  fractions, not angles.
+- **The back face's slice runs past 1.0** (`0.875 → 1.125`) so the wrap's own
+  seam sits in the middle of it, hidden at the back of his skull. The map must
+  therefore have `wrapS = RepeatWrapping`.
+- **A sliver at each end of the band is reserved** for the crown and chin faces,
+  painted flat and painted *last* so nothing that ran off the band can appear
+  on them.
+- **The head is unlit** (`MeshBasicMaterial`) while the body is toon-shaded.
+  With toon shading each box face gets its own flat tone, so every corner
+  becomes a tonal step — half of what read as stitched. The wrap is a drawing
+  that already carries its own light.
+- **Nothing painted may have a straight vertical edge.** On a box those land
+  exactly on a corner and read as a join; the nape is a cosine falloff across
+  the full width for that reason.
+
+### His face is straightened in the bake, not faked at runtime
+
+The illustration is a three-quarter view — his head is drawn turned about 30°,
+measured off the artwork: his ink outline runs 4%→93% of the crop so his skull's
+centreline is at 48.5%, but his pupils put his plane of symmetry at 26%.
+
+`tools/bake-art.py` re-projects it. Treat the drawn head as a cylinder: a
+feature at true angle θ appears at `sin(θ + α)` and belongs at `sin(θ)`, so
+sampling the source at `sin(asin(x) + α)` per column rotates the face back.
+`FACE_STRAIGHTEN` is how much of the turn to undo — **0.5**, chosen off a ladder
+of renders; 1.0 is geometrically dead-on but stretches his far cheek ~60% and
+visibly widens one eye against the other.
+
+Two things this gets right that are easy to get wrong:
+
+- **Clamp the angle, not the position.** Past ±90° the output is asking for part
+  of the head that was hidden behind the silhouette; without clamping `asin(u) +
+  α` the sine folds back, the mapping stops being monotone, and background from
+  outside his head smears across his face.
+- **Recentring is free** — at θ = 0 his nose lands on the axis — *provided*
+  `FACE_AXIS` is his skull's centreline and not the crop's midpoint. Get that
+  wrong and the whole face slides sideways instead of turning.
+
+An earlier attempt faked this by sliding the artwork round the wrap
+(`FACE_YAW_FIX`). That is gone; with the bake doing it properly the two would
+fight each other.
+
+### Limb signs### Limb signs
 
 Every limb hangs down `-Y`, so a **positive `rotation.x` swings the lower end
 forward** (toward `-Z`). Knees are negative because knees bend backwards.
