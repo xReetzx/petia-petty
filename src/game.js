@@ -205,6 +205,9 @@ window.PP = window.PP || {};
    * the roster, so a fresh Player picks up the new palette. */
   function pickCharacter(id) {
     if (!PP.Characters.select(id)) return;
+    // The head wrap is painted from the selected palette, so it has to be
+    // repainted before the model that samples it is rebuilt.
+    PP.Face.refreshHead();
     scene.remove(player.root);
     player = new PP.Player(scene);
     player.reset();
@@ -562,6 +565,25 @@ window.PP = window.PP || {};
       thigh: player.legs.map((l) => +l.pivot.rotation.x.toFixed(4)),
       ankle: player.legs.map((l) => +l.foot.rotation.x.toFixed(4)),
       landT: +player.landT.toFixed(4)
+    }),
+    /* Elbow flexion per arm, in the arm's own frame.
+     *
+     * Limbs hang down -Y, so a POSITIVE rotation.x swings the lower end
+     * toward -Z, which is forward. Knees are correctly negative because knees
+     * bend backwards; every elbow had the same sign, so his forearms folded
+     * behind him — "his arms look backwards".
+     *
+     * Deliberately measured here and not in world space: at the back of a
+     * stride the whole arm trails behind him, so a world-space fist-versus-
+     * elbow test fails on a perfectly correct arm. The sign of the joint is
+     * the thing that was wrong and the thing worth pinning.
+     */
+    elbows: () => player.arms.map((a) => +a.fore.rotation.x.toFixed(3)),
+    // The head is one mesh under one texture. A material ARRAY here means the
+    // six-faced box is back, and with it the stitched-together look.
+    headInfo: () => ({
+      materials: Array.isArray(player.skull.material) ? player.skull.material.length : 1,
+      geometry: player.skull.geometry.type
     }),
     // World-space Y of each foot, for checking ground contact
     feetY: () => player.legs.map((l) => {

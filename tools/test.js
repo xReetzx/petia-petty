@@ -332,6 +332,34 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   ok(Math.max(...fastBobs) - Math.min(...fastBobs) > 0.04, 'bob survives at top speed too');
   ok(fast[0].lean > slow[0].lean, 'he leans in further at speed');
 
+  console.log('\n=== HEAD AND ARMS ===');
+  const head = await page.evaluate('window.__PP_DEBUG.headInfo()');
+  ok(head.materials === 1 && head.geometry === 'SphereGeometry',
+    'head is one mesh under one texture (' + head.geometry + ', ' +
+    head.materials + ' material)');
+
+  /* Elbows bend forward — the exact bug that made his arms look backwards,
+   * and it held through the entire suite. Sampled across a full stride and
+   * through a jump, since every pose set the sign independently. */
+  const elbowTrace = await page.evaluate(async () => {
+    const out = [];
+    for (let i = 0; i < 40; i++) {
+      out.push(window.__PP_DEBUG.elbows());
+      await new Promise(r => requestAnimationFrame(r));
+    }
+    return out;
+  });
+  const bent = elbowTrace.flat();
+  ok(Math.min(...bent) > 0,
+    'elbows bend forward all cycle (min flexion ' + Math.min(...bent).toFixed(2) + ' rad)');
+
+  await page.keyboard.press('w');
+  await sleep(180);
+  const airElbows = await page.evaluate('window.__PP_DEBUG.elbows()');
+  ok(Math.min(...airElbows) > 0,
+    'and in the air (' + airElbows.join(', ') + ')');
+  await page.waitForFunction('window.__PP_DEBUG.airborne() === false', { timeout: 5000 });
+
   console.log('\n=== INPUT ===');
   await page.evaluate('window.__PP_DEBUG.start()');
   await sleep(500);

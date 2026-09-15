@@ -129,8 +129,8 @@ lands on his eyes.
 ### His face is the real artwork, not a drawing of it
 
 `assets/petty-ref.jpg` is the reference illustration. `tools/bake-art.py` crops
-it — face, side profile, and the whole composition — and writes them into
-`src/art.js` as base64 data URIs. Re-run it after changing the artwork:
+it — the face and the whole composition — and writes them into `src/art.js` as
+base64 data URIs. Re-run it after changing the artwork:
 
 ```bash
 python3 tools/bake-art.py        # PREVIEW=/some/dir to also dump the crops
@@ -152,17 +152,63 @@ Two things follow from the artwork being a real image:
   that was the first attempt, and his face silently stayed hand-drawn.
 - **Crop constants are in source-image pixel coordinates.** The source was
   converted from a 8.8 MB PNG to a 0.83 MB JPEG at identical dimensions so they
-  still hold; do not resize it without rescaling them.
+  still hold; do not resize it without rescaling them. `FACE` must stay square,
+  and it is deliberately generous — the mask in `face.js` does the trimming, so
+  reframing does not mean re-baking.
 
 The hand-drawn face in `src/face.js` is kept as the fallback and for roster
 slots with no artwork. `PP.Face.drawn()` reaches it directly.
+
+### The head is one surface, not six
+
+It used to be a `BoxGeometry` with six materials: a three-quarter portrait on
+the front, a closer crop of that *same* portrait on both sides — so he had a
+face on each side of his head — and a flat brown slab at the back with none of
+the illustration's ink in it. Three unrelated images at three scales meeting at
+hard 90° corners, where tone, scale and line weight all jumped at once. That is
+what "stitched together" looks like, and no re-cropping fixes it while the
+geometry is a cube.
+
+It is now **one scaled sphere under one wrapped texture**, built by
+`PP.Face.headWrap()`. Things that depend on each other here:
+
+- **The wrap is equirectangular**, which is what a UV sphere wants. Canvas `x`
+  runs around the head, `y` from crown to chin. `FACE_TOP`/`FACE_HEIGHT` in
+  `config.js` are therefore *polar angles*, not a pixel box.
+- **A default sphere puts `u = 0` at `-X`**, so the UV seam would land on his
+  left cheek. `headWrap` sets `offset.x = -0.25` to move it to the back of his
+  skull, which also lands the canvas centre on his face. Change one without the
+  other and the seam crosses his nose.
+- **The head is unlit** (`MeshBasicMaterial`) while the body is toon-shaded. A
+  3-step gradient on flat box faces is clean cel shading; on a sphere it puts a
+  hard terminator band across the curve, and on a head that band cuts his face
+  in half. The wrap is a drawing that already carries its own light.
+- **The artwork is a three-quarter view** — his drawn head is turned about 20°.
+  `FACE_YAW_FIX` composites it that bit further round the wrap so his gaze ends
+  up down the street, rather than rotating the geometry, which reads as a head
+  put on crooked. His eyes still cut to his right, which is the side the
+  clippers hunt from.
+- **Nothing painted may have a straight vertical edge.** A vertical line on an
+  equirectangular wrap becomes a hard line down the side of his skull; the nape
+  is a cosine falloff across the full width for exactly this reason.
+
+### Limb signs
+
+Every limb hangs down `-Y`, so a **positive `rotation.x` swings the lower end
+forward** (toward `-Z`). Knees are negative because knees bend backwards.
+Elbows must be **positive** — they were negative for a long time, which folded
+his forearms behind him and put his fists at his back whatever his shoulders
+did. `npm test` pins the sign now.
 
 ### Two rendering constraints worth knowing
 
 - **Outlines are inverted hulls** — a back-faced copy of each mesh scaled
   outward. This only works on *closed* geometry. An open-ended cylinder or a
   partial sphere renders its black interior instead, which shows up as dark
-  wedges through the model. Build from closed primitives.
+  wedges through the model. Build from closed primitives — or, where the shape
+  genuinely has to be open, skip the outline. The hair cap and the stage-2
+  panels are domes and carry none; with an outline the cap's rim rendered as a
+  hard black band straight across his eyebrows.
 - **`destination-out` needs something underneath.** The alopecia patches are
   punched through a separate beard layer that is then composited over painted
   skin. Punching straight onto a canvas with nothing beneath erases to

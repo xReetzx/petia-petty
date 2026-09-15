@@ -93,49 +93,48 @@ PP.Player = (function () {
 
     // --- Head -------------------------------------------------------------
     const head = new THREE.Group();
-    head.position.y = 2.02 - SPINE_Y;
+    head.position.y = PP.CFG.HEAD_Y - SPINE_Y;
     chest.add(head);
     this.head = head;
 
-    // A touch wider than tall so it reads as a head rather than a slab.
-    // Proportioned to the artwork crop in tools/bake-art.py, so his face
-    // maps onto the front of the head without being stretched.
-    const skullGeo = new THREE.BoxGeometry(0.88, 0.98, 0.74);
-
-    // BoxGeometry material order is [+X, -X, +Y, -Y, +Z, -Z]. He runs toward
-    // -Z, so -Z is his front. Every face gets its own drawn texture: a
-    // turnaround showed that with only the front painted, the sides and back
-    // were bare skin slabs — and the chase camera looks at the back of his
-    // head for the entire run, so that was the view that mattered most.
-    const faceMat  = U_.toonMat(0xffffff, { map: PP.Face.get('panic') });
-    const sideTex = PP.Face.side();
-    const sideMatL = U_.toonMat(0xffffff, { map: sideTex });
-    // Mirror for the far side so the ear faces forward on both. The clone
-    // shares the same canvas image, so it picks up the artwork when it
-    // decodes just as the original does.
-    const mirrored = sideTex.clone();
-    mirrored.wrapS = THREE.RepeatWrapping;
-    mirrored.repeat.x = -1;
-    mirrored.needsUpdate = true;
-    const sideMatR = U_.toonMat(0xffffff, { map: mirrored });
-    const backMat  = U_.toonMat(0xffffff, { map: PP.Face.back() });
-    const underMat = U_.toonMat(0xffffff, { map: PP.Face.under() });
-    const topMat   = U_.toonMat(c.hair);
-
-    const skull = new THREE.Mesh(skullGeo,
-      [sideMatR, sideMatL, topMat, underMat, backMat, faceMat]);
-    U_.outline(skull, 0.07);
+    /* One head, one surface, one texture.
+     *
+     * This was a BoxGeometry with six materials: a portrait on the front, a
+     * closer crop of the same portrait on both sides, and a flat brown slab
+     * at the back. Three unrelated images at three scales meeting at hard
+     * corners — which is exactly what "stitched together" looks like.
+     *
+     * A scaled sphere is the right primitive. It is closed, so the
+     * inverted-hull outline still works (open geometry renders its black
+     * interior — see CLAUDE.md), and its UVs are already equirectangular,
+     * which is the projection a head wrap needs.
+     */
+    const skullGeo = new THREE.SphereGeometry(PP.CFG.HEAD_R, 28, 20);
+    /* Unlit, unlike everything else on him.
+     *
+     * The body is MeshToonMaterial with a 3-step gradient, which on flat box
+     * faces reads as clean cel shading. On a sphere the same gradient puts a
+     * hard terminator band across the curve — and on a head that band falls
+     * straight down his face and cuts it in half. The wrap is a drawing that
+     * already carries its own light and shadow, so the right answer is not to
+     * light it twice: his face then reads identically from every angle, which
+     * for the one part of him the player is looking at is what you want.
+     */
+    const skull = new THREE.Mesh(skullGeo, new THREE.MeshBasicMaterial({
+      map: PP.Face.headWrap()
+    }));
+    skull.scale.set.apply(skull.scale, PP.CFG.HEAD_SCALE);
+    U_.outline(skull, 0.06);
     head.add(skull);
     this.skull = skull;
-    this.faceMat = faceMat;
+    this.faceMat = skull.material;
 
-    // Ears, sitting proud of the drawn ones on the side textures
-    [-1, 1].forEach((s) => {
-      const ear = U_.inked(new THREE.SphereGeometry(0.12, 8, 6), c.skin, 0.04);
-      ear.position.set(s * 0.45, -0.02, 0.02);
-      ear.scale.set(0.5, 1.05, 0.8);
-      head.add(ear);
-    });
+    /* No separate ears.
+     *
+     * There used to be a sphere on each side sitting on top of an ear that
+     * was already drawn into the side texture, so he had two of each. The
+     * wrap paints them now, in the right place, at the right scale.
+     */
 
     /* No 3D beard any more.
      *
@@ -146,8 +145,16 @@ PP.Player = (function () {
      * their own textures, toned from the same sampled palette.
      */
 
-    // Hair lives on the head so it follows the look-back twist.
+    /* Hair lives on the head so it follows the look-back twist.
+     *
+     * Its pieces were hand-placed against the old 0.88-wide box. The skull is
+     * smaller and round now, so the whole group is scaled and lifted to match
+     * rather than every cone and lump being re-tuned — at the old size the cap
+     * came down over his eyes like a helmet.
+     */
     this.hairGroup = new THREE.Group();
+    this.hairGroup.scale.setScalar(PP.CFG.HAIR_SCALE);
+    this.hairGroup.position.y = PP.CFG.HAIR_LIFT;
     head.add(this.hairGroup);
 
     // --- Arms -------------------------------------------------------------
@@ -233,8 +240,8 @@ PP.Player = (function () {
    *   1  horseshoe only — the whole crown is gone
    *   0  bald, and the run is over
    *
-   * A bare scalp dome always sits under the hair so the shaved areas read as
-   * skin rather than as holes in the mesh.
+   * The head itself is skin-toned all the way round, so a shaved area reads
+   * as skin without any extra geometry under the hair.
    */
   Player.prototype.setHair = function (n, opts) {
     const U_ = U(), c = C();
@@ -245,16 +252,11 @@ PP.Player = (function () {
       this.hairGroup.remove(this.hairGroup.children[0]);
     }
 
-    // Scalp: always present, so a buzzed patch shows skin underneath
-    if (!this.scalp) {
-      this.scalp = U_.inked(
-        new THREE.SphereGeometry(0.48, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.5),
-        c.skin, 0.045
-      );
-      this.scalp.position.set(0, 0.2, 0.1);
-      this.scalp.scale.set(0.96, 0.9, 0.9);
-      this.head.add(this.scalp);
-    }
+    /* No scalp dome any more. It existed to put skin under the hair when the
+     * head was a box whose top face was painted flat hair-colour; the head is
+     * now a skin-toned surface in its own right, so a buzzed patch already
+     * shows skin without a second mesh inside the first.
+     */
 
     if (this.hair > 0) this._buildHair(this.hair);
 
@@ -276,25 +278,31 @@ PP.Player = (function () {
     };
 
     if (stage === 3) {
-      // Full mop: cap plus spikes all over
-      const cap = U_.inked(
-        new THREE.SphereGeometry(0.52, 14, 12, 0, Math.PI * 2, 0, Math.PI * 0.55),
-        c.hair, 0.06
+      /* Full mop: cap plus spikes all over.
+       *
+       * No outline on the cap. It is a dome — open at the bottom — and an
+       * inverted-hull outline on open geometry renders the mesh's black
+       * interior, which came out as a hard flat band straight across his
+       * eyebrows. The hair is nearly black already, so it reads as its own
+       * silhouette without one. (See the rendering note in CLAUDE.md; this is
+       * the same trap that produced dark wedges through his head once before.)
+       */
+      const cap = new THREE.Mesh(
+        new THREE.SphereGeometry(0.52, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.55),
+        U_.toonMat(c.hair)
       );
       cap.position.set(0, 0.2, 0.13);
       cap.scale.set(1.0, 0.95, 0.94);
       this.hairGroup.add(cap);
 
-      // A separate slab down the back of the skull, which the shell alone
-      // no longer reaches now that its sweep stops at the hairline.
-      const nape = U_.inked(
-        new THREE.SphereGeometry(0.46, 12, 10, 0, Math.PI, Math.PI * 0.25, Math.PI * 0.45),
-        c.hair, 0.05
-      );
-      nape.position.set(0, 0.16, 0.2);
-      nape.rotation.y = -Math.PI / 2;
-      nape.scale.set(1.0, 1.0, 0.85);
-      this.hairGroup.add(nape);
+      /* No separate slab down the back of the skull any more.
+       *
+       * It was a PARTIAL sphere — open geometry — and the inverted-hull
+       * outline on open geometry renders the mesh's black interior, which is
+       * the hard-edged dark notch it was throwing at the back of his head.
+       * It was hidden inside the old box skull; on a smaller rounded one it
+       * poked out. The head wrap paints the nape now, so it has no job left.
+       */
 
       // Overlapping lumps that break up the dome. A smooth cap read as a
       // helmet; the reference's hair is a messy irregular mass, and a handful
@@ -325,9 +333,10 @@ PP.Player = (function () {
       // One clean strip mown straight through the middle. Built as two
       // side panels with a gap, so the bare scalp shows down the centre.
       [-1, 1].forEach((side) => {
-        const panel = U_.inked(
-          new THREE.SphereGeometry(0.48, 10, 8, 0, Math.PI, 0, Math.PI * 0.5),
-          c.hair, 0.055
+        // Open geometry again, so no outline — see the note on the stage-3 cap
+        const panel = new THREE.Mesh(
+          new THREE.SphereGeometry(0.48, 12, 8, 0, Math.PI, 0, Math.PI * 0.5),
+          U_.toonMat(c.hair)
         );
         panel.position.set(side * 0.15, 0.24, 0.05);
         panel.rotation.y = side > 0 ? -Math.PI / 2 : Math.PI / 2;
@@ -571,7 +580,7 @@ PP.Player = (function () {
       });
       this.arms.forEach((a) => {
         a.pivot.rotation.x = U_.damp(a.pivot.rotation.x, -2.1, 14, dt);
-        a.fore.rotation.x = U_.damp(a.fore.rotation.x, -0.4, 14, dt);
+        a.fore.rotation.x = U_.damp(a.fore.rotation.x, 0.5, 14, dt);
       });
       this.pelvis.rotation.y = U_.damp(this.pelvis.rotation.y, 0, 12, dt);
       this.chestYaw = U_.damp(this.chestYaw || 0, 0, 12, dt);
@@ -599,7 +608,7 @@ PP.Player = (function () {
       // Arms up and back, and asymmetric — a symmetric pose reads as a doll
       this.arms.forEach((a) => {
         a.pivot.rotation.x = U_.damp(a.pivot.rotation.x, -1.2 - a.side * 0.35, 12, dt);
-        a.fore.rotation.x = U_.damp(a.fore.rotation.x, -0.7 - a.side * 0.2, 12, dt);
+        a.fore.rotation.x = U_.damp(a.fore.rotation.x, 0.7 + a.side * 0.2, 12, dt);
       });
       this.pelvis.rotation.y = U_.damp(this.pelvis.rotation.y, 0, 10, dt);
       this.chestYaw = U_.damp(this.chestYaw || 0, 0, 10, dt);
@@ -646,7 +655,15 @@ PP.Player = (function () {
       this.arms.forEach((a) => {
         const u = frac(base + (a.side > 0 ? 0 : 0.5));
         a.pivot.rotation.x = Math.cos(u * Math.PI * 2) * cfg.ARM_AMP + cfg.ARM_BIAS;
-        a.fore.rotation.x = -1.15 - Math.cos(u * Math.PI * 2 + 0.9) * 0.35;
+        /* Elbows fold FORWARD. Every limb in this rig hangs down -Y, so a
+         * positive rotation.x swings the lower end toward -Z, which is the
+         * way he is running. The knee is correctly negative because knees
+         * bend backwards; the elbow had the same sign, which folded his
+         * forearms behind him and put his fists at his back whatever his
+         * shoulders were doing. That is what "his arms look backwards" was.
+         */
+        a.fore.rotation.x = cfg.ELBOW_BASE
+          + Math.cos(u * Math.PI * 2 + 0.9) * cfg.ELBOW_SWING;
         a.pivot.rotation.z = -a.side * cfg.ARM_TUCK;
       });
 
@@ -701,7 +718,7 @@ PP.Player = (function () {
       this.arms.forEach((a) => {
         a.pivot.rotation.x += stumbleK * (a.side > 0 ? -1.15 : -0.35);
         a.pivot.rotation.z += stumbleK * a.side * 0.5;
-        a.fore.rotation.x += stumbleK * 0.35;
+        a.fore.rotation.x -= stumbleK * 0.35;
       });
       this.body.rotation.x += stumbleK * 0.14;
     }

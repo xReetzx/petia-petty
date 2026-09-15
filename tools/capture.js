@@ -61,6 +61,31 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   console.log('turn-{front,front34,side,back}.png');
   await p.close();
 
+  /* --- Head orbit ---------------------------------------------------------
+   *
+   * Eight frames at 45 degrees, head filling the frame. This is the sheet
+   * that answers "does it read as one thing" — the turnaround is framed too
+   * wide to show a seam, which is how a head made of three unrelated
+   * photographs shipped in the first place.
+   */
+  p = await open(320, 320, 2);
+  await p.keyboard.press('Space');
+  await sleep(1500);
+  await p.evaluate(() => {
+    window.__PP_DEBUG.hideWorld();
+    document.getElementById('hud').style.display = 'none';
+  });
+  for (let i = 0; i < 8; i++) {
+    await p.evaluate((a) => {
+      window.__PP_DEBUG.faceForward();
+      window.__PP_DEBUG.poseCam(a, 2.5, 2.02, 2.02);
+    }, i * 45);
+    await sleep(320);
+    await p.screenshot({ path: `${SHOTS}/head-${i}.png` });
+  }
+  console.log('head-0..7.png');
+  await p.close();
+
   /* --- Stride strips -----------------------------------------------------
    *
    * A run cycle cannot be judged from one frame. These walk the whole cycle
@@ -151,26 +176,38 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   console.log('menace-{0,0.5,0.95}.png');
   await p.close();
 
-  // --- Raw head textures --------------------------------------------------
-  p = await open(1100, 400);
+  /* --- The head wrap, flat ------------------------------------------------
+   *
+   * One texture now, not three. Reading it unrolled is the quickest way to
+   * see whether the artwork is blending into the painted skin or still
+   * sitting on it as a rectangle, and whether the two halves of the nape
+   * meet at the edges — that join is the head's only seam.
+   */
+  p = await open(1100, 620);
+  await p.keyboard.press('Space');
+  await sleep(1800);
   await p.evaluate(() => {
+    const tex = PP.Face.headWrap();
     document.body.innerHTML = '';
-    document.body.style.cssText = 'background:#f4efe4;display:flex;gap:10px;padding:10px;margin:0';
-    const add = (tex, label) => {
-      const wrap = document.createElement('div');
-      const c = document.createElement('canvas');
-      c.width = 340; c.height = 340;
-      c.style.cssText = 'border:2px solid #141013;display:block';
-      c.getContext('2d').drawImage(tex.image, 0, 0, 340, 340);
-      const t = document.createElement('div');
-      t.textContent = label;
-      t.style.cssText = 'font:700 13px sans-serif;text-align:center;padding-top:4px';
-      wrap.appendChild(c); wrap.appendChild(t);
-      document.body.appendChild(wrap);
-    };
-    add(PP.Face.get('panic'), 'FRONT');
-    add(PP.Face.side(), 'SIDE');
-    add(PP.Face.back(), 'BACK');
+    document.body.style.cssText = 'background:#f4efe4;padding:12px;margin:0;font:700 13px sans-serif';
+    const c = document.createElement('canvas');
+    c.width = 1024; c.height = 512;
+    c.style.cssText = 'border:2px solid #141013;display:block;width:1050px;height:525px';
+    const g = c.getContext('2d');
+    g.drawImage(tex.image, 0, 0);
+    // Mark where the front, sides and seam land
+    g.strokeStyle = '#d94a4a'; g.lineWidth = 3;
+    [[512, 'FRONT'], [256, 'HIS RIGHT'], [768, 'HIS LEFT']].forEach(([x, label]) => {
+      g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 512); g.stroke();
+      g.fillStyle = '#d94a4a'; g.font = 'bold 18px sans-serif';
+      g.fillText(label, x + 6, 22);
+    });
+    g.fillText('SEAM', 6, 500);
+    document.body.appendChild(c);
+    const t = document.createElement('div');
+    t.textContent = 'HEAD WRAP — equirectangular, seam at the back of the skull';
+    t.style.paddingTop = '6px';
+    document.body.appendChild(t);
   });
   await sleep(400);
   await p.screenshot({ path: `${SHOTS}/textures.png` });

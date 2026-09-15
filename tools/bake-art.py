@@ -26,20 +26,28 @@ SRC = os.path.join(ROOT, 'assets', 'petty-ref.jpg')
 CHROME_TOP = 210          # below the bars and the Crop button
 CHROME_BOTTOM = 2300      # above the lower bar
 
-# Face: mid-forehead down to below the chin. Deliberately starts BELOW the
-# hairline — his 3D hair sits above it, because hair loss is the health bar and
-# baking the drawn hair in would fight the mechanic the game is built on.
-FACE = (150, 940, 990, 1990)
+# Face: forehead down to below the beard, and wide enough to carry his ear.
+#
+# A SQUARE region of the source, so nothing is stretched. It is deliberately
+# generous: `src/face.js` composites it into the head wrap through a soft
+# elliptical mask, and the mask is what trims the corners — the yellow
+# background scribble on the left, the maroon shirt at the bottom, the poster
+# behind his shoulder on the right. Trimming here instead would mean re-baking
+# every time the framing needs a nudge.
+#
+# It starts BELOW the drawn hairline. His 3D hair sits above it, because hair
+# loss is the health bar and baking a second hairline in would fight the
+# mechanic the whole game is built on.
+FACE = (112, 990, 1112, 1990)
 
-# Side of the head: the drawing shows his left ear, jaw and the beard running
-# behind it, so the head's side faces come out of the artwork too rather than
-# being painted separately — painted ones sat lighter and flatter than the
-# illustration and the seam at the box edge showed.
-SIDE = (620, 1108, 1072, 1706)
-
-# Box proportions, so crops are not distorted when mapped.
-HEAD_ASPECT = 0.88 / 0.98          # front face: width / height
-SIDE_ASPECT = 0.74 / 0.98          # side face: depth / height
+# No SIDE crop any more.
+#
+# The head used to be a box with a different picture on each face, and the
+# sides took a second, closer crop of this same three-quarter portrait. The
+# result was a man with a face on each side of his head, at a different scale
+# and meeting the front at a hard 90-degree corner. The head is now one
+# rounded mesh under one wrapped texture, and face.js paints the sides to
+# match, so there is nothing for a second crop to do.
 
 
 def data_uri(img, fmt, quality=None):
@@ -61,36 +69,11 @@ def main():
 
     # --- face -----------------------------------------------------------
     x0, y0, x1, y1 = FACE
-    # Widen or heighten the crop so its aspect matches the head, then squash to
-    # a square texture: mapping a square texture onto the head's rectangle
-    # un-squashes it, so proportions come out correct either way.
-    w, h = x1 - x0, y1 - y0
-    want_w = h * HEAD_ASPECT
-    if want_w > w:
-        pad = int((want_w - w) / 2)
-        x0, x1 = x0 - pad, x1 + pad
-    else:
-        want_h = w / HEAD_ASPECT
-        pad = int((want_h - h) / 2)
-        y0, y1 = y0 - pad, y1 + pad
+    if (x1 - x0) != (y1 - y0):
+        sys.exit('FACE must be square so the artwork is not stretched')
     face = im.crop((max(0, x0), max(0, y0), min(im.width, x1), min(im.height, y1)))
-    face = face.resize((512, 512), Image.LANCZOS)
+    face = face.resize((640, 640), Image.LANCZOS)
     face_uri, face_bytes = data_uri(face, 'JPEG', 88)
-
-    # --- side ------------------------------------------------------------
-    sx0, sy0, sx1, sy1 = SIDE
-    sw, sh = sx1 - sx0, sy1 - sy0
-    want = sh * SIDE_ASPECT
-    if want > sw:
-        pad = int((want - sw) / 2)
-        sx0, sx1 = sx0 - pad, sx1 + pad
-    else:
-        want_h = sw / SIDE_ASPECT
-        pad = int((want_h - sh) / 2)
-        sy0, sy1 = sy0 - pad, sy1 + pad
-    side = im.crop((max(0, sx0), max(0, sy0), min(im.width, sx1), min(im.height, sy1)))
-    side = side.resize((384, 384), Image.LANCZOS)
-    side_uri, side_bytes = data_uri(side, 'JPEG', 85)
 
     # --- cover: the whole illustration, chrome removed -------------------
     cover = im.crop((0, CHROME_TOP, im.width, CHROME_BOTTOM))
@@ -111,12 +94,10 @@ def main():
                 'window.PP = window.PP || {};\n\n'
                 'PP.Art = {\n')
         f.write("  face: '%s',\n\n" % face_uri)
-        f.write("  side: '%s',\n\n" % side_uri)
         f.write("  cover: '%s'\n" % cover_uri)
         f.write('};\n')
 
-    print('face  %6.1f KB  -> 512x512' % (face_bytes / 1024))
-    print('side  %6.1f KB  -> 384x384' % (side_bytes / 1024))
+    print('face  %6.1f KB  -> 640x640' % (face_bytes / 1024))
     print('cover %6.1f KB  -> %dx%d' % (cover_bytes / 1024, cover.width, cover.height))
     print('wrote %s (%.1f KB)' % (out, os.path.getsize(out) / 1024))
 
@@ -124,7 +105,6 @@ def main():
     prev = os.environ.get('PREVIEW')
     if prev:
         face.save(os.path.join(prev, 'bake-face.png'))
-        side.save(os.path.join(prev, 'bake-side.png'))
         cover.save(os.path.join(prev, 'bake-cover.png'))
         print('previews written to', prev)
 

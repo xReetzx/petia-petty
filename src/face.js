@@ -661,6 +661,240 @@ PP.Face = (function () {
    * later with `needsUpdate`. The material holds one texture throughout and
    * does not care that its pixels changed.
    */
+
+  /* ---- The head, as one continuous surface ------------------------------
+   *
+   * The head used to be a box with a different picture on each of its six
+   * faces: a three-quarter portrait on the front, a closer crop of that SAME
+   * portrait on both sides (so he had a face on each side of his head), and a
+   * flat brown slab at the back with none of the illustration's ink in it.
+   * They met at hard 90-degree corners where tone, scale and line weight all
+   * jumped at once. That is what "stitched together" was, and no amount of
+   * re-cropping fixes it while the geometry is a cube.
+   *
+   * So: one rounded mesh, one texture, painted all the way round.
+   *
+   * The canvas is equirectangular, which is exactly what a UV sphere wants.
+   * `x` runs around the head and `y` from crown to chin. The face artwork is
+   * composited into the middle through a soft elliptical mask, so instead of
+   * ending at a rectangle its edges dissolve into skin that carries on around
+   * the sides and joins itself at the back.
+   *
+   * Two mapping facts this depends on, both verified against the render
+   * rather than assumed:
+   *
+   *  - A default THREE.SphereGeometry puts u = 0 at -X, so the UV seam would
+   *    land on his left cheek. `player.js` shifts the map by -0.25 to move it
+   *    to the back of his head, which also lands the canvas centre on his
+   *    face. Change one without the other and the seam crosses his nose.
+   *  - Canvas x increasing appears to move RIGHT when you are looking at his
+   *    face, so the artwork goes on unmirrored.
+   */
+  const WRAP_W = 1024, WRAP_H = 512;
+
+  // Character palette if one is selected, otherwise the base scheme.
+  function pal() {
+    const base = PP.CFG.COL;
+    const cc = PP.Characters && PP.Characters.current && PP.Characters.current().colors;
+    return new Proxy(base, { get: (t, k) => (cc && cc[k] != null ? cc[k] : t[k]) });
+  }
+
+  // Longitude in degrees (0 = straight ahead) to a canvas x.
+  const lonX = (deg) => WRAP_W / 2 + (deg / 360) * WRAP_W;
+
+  function paintWrap(ctx, faceImg) {
+    const c = pal();
+    const W = WRAP_W, H = WRAP_H;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    // --- skin everywhere ---------------------------------------------------
+    ctx.fillStyle = hex(c.skin);
+    ctx.fillRect(0, 0, W, H);
+    PP.U.hatch(ctx, 0, 0, W, H, 11, Math.PI / 2.9, 0.08, hex(c.skinDark));
+
+    // Under the jaw goes into shadow, which also hides the pole pinch.
+    const under = ctx.createLinearGradient(0, H * 0.72, 0, H);
+    under.addColorStop(0, 'rgba(0,0,0,0)');
+    under.addColorStop(1, 'rgba(60,32,22,0.55)');
+    ctx.fillStyle = under;
+    ctx.fillRect(0, H * 0.72, W, H * 0.28);
+
+    // --- beard, swept continuously round the jaw ---------------------------
+    // Drawn as one path across the whole width so it closes on itself at the
+    // seam: a beard that stopped short of the edges would show a chin-strap
+    // join at the back of his head.
+    // Toned toward his hair rather than the lighter beard swatch: beside the
+    // drawn beard, which is near-black hatching, the mid-brown read as a bald
+    // patch rather than as the same beard continuing round.
+    ctx.fillStyle = hex(c.hair);
+    ctx.globalAlpha = 0.88;
+    ctx.beginPath();
+    ctx.moveTo(0, H * 0.62);
+    for (let x = 0; x <= W; x += 16) {
+      // Highest at the sideburns, dipping across the front where his
+      // moustache and mouth sit, and rising again behind the ears.
+      const lon = ((x / W) - 0.5) * 360;            // -180..180, 0 = front
+      const front = Math.cos((lon * Math.PI) / 180); // 1 at front, -1 at back
+      const y = H * (0.60 - front * 0.10) + Math.sin(x * 0.05) * 5;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(W, H); ctx.lineTo(0, H);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // Ragged edge, so it reads as hair rather than a painted mask
+    ctx.strokeStyle = hex(c.hair);
+    ctx.lineCap = 'round';
+    const rb = PP.U.rng(90210);
+    for (let i = 0; i < 1100; i++) {
+      const x = rb() * W;
+      const lon = ((x / W) - 0.5) * 360;
+      const front = Math.cos((lon * Math.PI) / 180);
+      const edge = H * (0.60 - front * 0.10);
+      ctx.lineWidth = 1.6 + rb() * 2.2;
+      ctx.beginPath();
+      ctx.moveTo(x, edge + rb() * 26);
+      ctx.lineTo(x + (rb() - 0.5) * 9, edge - 6 - rb() * 26);
+      ctx.stroke();
+    }
+
+    // --- nape: hair coming down the back -----------------------------------
+    // Drawn as a cosine falloff across the FULL width rather than a polygon
+    // spanning part of it. A polygon has straight vertical sides, and a
+    // straight vertical edge on an equirectangular wrap becomes a hard line
+    // down the side of his skull. Centred on the seam, so its two halves meet
+    // exactly where the texture joins itself.
+    const napeY = (x) => {
+      const lon = ((x / W) - 0.5) * 360;
+      const back = (1 - Math.cos((lon * Math.PI) / 180)) / 2;   // 0 front, 1 back
+      return H * (0.02 + Math.pow(back, 1.8) * 0.62);
+    };
+    ctx.fillStyle = hex(c.hair);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    for (let x = 0; x <= W; x += 8) ctx.lineTo(x, napeY(x));
+    ctx.lineTo(W, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    const rn = PP.U.rng(1357);
+    ctx.strokeStyle = hex(c.hair);
+    for (let i = 0; i < 420; i++) {
+      const x = rn() * W;
+      const edge = napeY(x);
+      if (edge < H * 0.06) continue;          // nothing to fringe at the front
+      ctx.lineWidth = 1.8 + rn() * 2.2;
+      ctx.beginPath();
+      ctx.moveTo(x, edge - 14 - rn() * 20);
+      ctx.lineTo(x + (rn() - 0.5) * 7, edge + rn() * 16);
+      ctx.stroke();
+    }
+
+    /* --- one ear -------------------------------------------------------
+     *
+     * Only on his right. The artwork is a three-quarter view that already
+     * contains his left ear, and painting a second one over it is exactly
+     * what the old head did — sphere ears sitting on top of drawn ones. So
+     * the wrap supplies only the ear the drawing does not.
+     */
+    (() => {
+      const x = lonX(-95), y = H * 0.50;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.fillStyle = hex(c.skin);
+      ctx.strokeStyle = hex(c.skinDark);
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 24, 36, 0.12, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.ellipse(3, 3, 10, 18, 0.12, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    })();
+
+    // --- the artwork --------------------------------------------------------
+    const fw = (PP.CFG.FACE_SPAN / 360) * W;
+    const fh = H * PP.CFG.FACE_HEIGHT;
+    const fx = lonX(PP.CFG.FACE_YAW_FIX) - fw / 2;
+    const fy = H * PP.CFG.FACE_TOP;
+
+    // Mask on its own canvas: compositing the feather directly onto the wrap
+    // would erase the skin underneath it rather than blending into it.
+    const m = document.createElement('canvas');
+    m.width = Math.ceil(fw); m.height = Math.ceil(fh);
+    const mc = m.getContext('2d');
+    if (faceImg) {
+      mc.drawImage(faceImg, 0, 0, m.width, m.height);
+    } else {
+      // Fallback: the hand-drawn face, so the head is never blank while the
+      // baked artwork is still decoding.
+      const seed = build('panic');
+      mc.drawImage(seed.image, 0, 0, m.width, m.height);
+      seed.dispose();
+    }
+    mc.globalCompositeOperation = 'destination-in';
+    // Build the gradient AFTER the translate and centred on the local origin:
+    // canvas resolves gradient coordinates in the transform active at fill
+    // time, which has bitten this project before.
+    mc.translate(m.width / 2, m.height / 2);
+    mc.scale(1, m.height / m.width);
+    const g = mc.createRadialGradient(0, 0, m.width * 0.20, 0, 0, m.width * 0.5);
+    g.addColorStop(0, 'rgba(0,0,0,1)');
+    g.addColorStop(0.72, 'rgba(0,0,0,1)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    mc.fillStyle = g;
+    mc.fillRect(-m.width, -m.height, m.width * 2, m.height * 2);
+
+    ctx.drawImage(m, fx, fy, fw, fh);
+
+    // A wash of the illustration's ink over everything, so the painted parts
+    // and the drawn parts sit in the same medium.
+    PP.U.hatch(ctx, 0, 0, W, H, 28, Math.PI / 4, 0.03, hex(c.ink));
+  }
+
+  let wrapCv = null, wrapTex = null, wrapStarted = false;
+  function headWrap() {
+    if (!wrapCv) {
+      wrapCv = document.createElement('canvas');
+      wrapCv.width = WRAP_W; wrapCv.height = WRAP_H;
+      paintWrap(wrapCv.getContext('2d'), null);
+      wrapTex = new THREE.CanvasTexture(wrapCv);
+      wrapTex.anisotropy = 4;
+      wrapTex.wrapS = THREE.RepeatWrapping;
+      // Move the UV seam off his cheek and onto the back of his head. This
+      // also lands the canvas centre on his face — see the note above.
+      wrapTex.offset.x = -0.25;
+    }
+    /* Decoding is asynchronous, so hand back one texture object immediately
+     * and repaint into the same canvas when the image arrives. Returning the
+     * artwork only once ready means materials get built from the fallback and
+     * never swapped, which is a bug this project has already shipped once.
+     */
+    if (!wrapStarted && window.PP && PP.Art && PP.Art.face) {
+      wrapStarted = true;
+      const img = new Image();
+      img.onload = () => {
+        paintWrap(wrapCv.getContext('2d'), img);
+        wrapTex.needsUpdate = true;
+      };
+      img.src = PP.Art.face;
+    }
+    return wrapTex;
+  }
+
+  /** Repaint the wrap after a character change re-tones the palette. */
+  function refreshHead() {
+    if (!wrapCv) return;
+    wrapStarted = false;
+    paintWrap(wrapCv.getContext('2d'), null);
+    wrapTex.needsUpdate = true;
+    headWrap();
+  }
+
   function artTexture(mode) {
     if (!artCanvas) {
       artCanvas = document.createElement('canvas');
@@ -892,5 +1126,5 @@ PP.Face = (function () {
   const back = () => (backCache.t || (backCache.t = backTexture()));
   const under = () => (underCache.t || (underCache.t = underTexture()));
 
-  return { get, drawn, build, side, back, under, portrait, portraitLocked, PATCHES };
+  return { get, drawn, build, headWrap, refreshHead, portrait, portraitLocked, PATCHES };
 })();
