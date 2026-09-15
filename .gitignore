@@ -13,6 +13,10 @@ Thumbs.db
 node_modules
 package-lock.json
 
+# Python bytecode, from importing tools/bake-art.py in a scratch script
+__pycache__/
+*.pyc
+
 # Local scratch
 *.log
 tmp/
