@@ -1,0 +1,52 @@
+# Publish the game to GitHub Pages on every push to main.
+#
+# The game is already a static site at the repo root — index.html plus src/ and
+# vendor/, no build step and nothing fetched at runtime — so this uploads the
+# tree as-is.
+#
+# `enablement: true` asks GitHub to switch Pages on from inside the run, which
+# is the only way to turn it on without a human in Settings. If the repository's
+# Actions permissions refuse that, this step fails with a clear message and
+# somebody has to flip it once by hand: Settings -> Pages -> Build and
+# deployment -> Source: GitHub Actions. After that this workflow keeps the site
+# up to date on its own.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race; let a newer push win, but don't cancel one that is
+# already mid-deploy.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
