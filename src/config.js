@@ -6,7 +6,6 @@ PP.CFG = {
   LANE_X: [-2.3, 0, 2.3],        // world X of each lane
   LANE_SWAP_TIME: 0.16,          // seconds to slide between lanes
   CHUNK_LEN: 30,                 // length of one streamed track chunk
-  CHUNK_COUNT: 7,                // chunks alive at once (pool size)
   SPAWN_AHEAD: 3,                // chunks kept ahead of the player
 
   // ---- Running ------------------------------------------------------------
@@ -148,15 +147,32 @@ PP.CFG = {
   POMADE_CHANCE: 0.12,
 
   // ---- Difficulty tiers (by metres travelled) -----------------------------
+  /* `level` gates which patterns may appear; `maxBlocked` caps how much of the
+   * road any one of them may fill; `density` is the chance a slot is used at
+   * all. Density is higher throughout than it was, because the spacing formula
+   * no longer starves the track at speed.
+   */
   TIERS: [
-    { at: 0,    density: 0.55, maxBlocked: 1 },
-    { at: 500,  density: 0.70, maxBlocked: 1 },
-    { at: 1200, density: 0.82, maxBlocked: 2 },
-    { at: 2500, density: 0.92, maxBlocked: 2 }
+    { at: 0,    level: 0, density: 0.72, maxBlocked: 1 },
+    { at: 400,  level: 1, density: 0.82, maxBlocked: 2 },
+    { at: 1100, level: 2, density: 0.90, maxBlocked: 2 },
+    { at: 2200, level: 3, density: 0.95, maxBlocked: 3 },
+    { at: 3600, level: 3, density: 1.00, maxBlocked: 3 }
   ],
-  SCENERY_X_MIN: 11.0,           // roadside props start this far out...
-  SCENERY_X_RANGE: 10.0,         // ...spread over this much more
-  SCENERY_PER_CHUNK: 6,          // roadside props spawned per track chunk
+  /* --- The street ---------------------------------------------------------
+   *
+   * Buildings sit on a line, both sides, rather than scattered across a band.
+   * A street wall is what makes a road feel like a canyon instead of a plain
+   * with boxes on it — and it is what "crowded" actually means here.
+   */
+  BUILDING_LINE: 8.4,           // face of the buildings, from the centre line
+  KERB_LINE: 5.35,                // where furniture stands, just off the kerb
+  PARKED_LINE: 5.9,              // parked cars against the kerb
+  TOWERS_PER_SIDE: 4,            // per 30u chunk, per side
+  FURNITURE_PER_SIDE: 11,
+  WALKERS_PER_SIDE: 12,
+  TOWER_VARIANTS: 14,            // distinct pre-merged silhouettes
+
   MIN_REACTION: 0.55,            // seconds of clear runway guaranteed before any obstacle
 
   // ---- Camera -------------------------------------------------------------
@@ -175,6 +191,35 @@ PP.CFG = {
   CAM_BACK_SPEED: 1.6,           // extra dolly-back by SPEED_MAX
   CAM_LAND_DIP: 0.55,            // camera drop on a full-speed landing
   SHAKE_DECAY: 4.5,
+
+  /* --- Dawn ----------------------------------------------------------------
+   *
+   * Manhattanhenge: the sun sits low and dead ahead, framed by the avenue.
+   *
+   * Painted as FLAT BANDS rather than a gradient, and the sun gets an ink
+   * outline and halo rings, because the rest of the game is a screen-printed
+   * comic and a photoreal sky would leave Petty looking pasted onto a
+   * different game.
+   */
+  SKY_BANDS: [
+    '#3b3a63',   // violet, overhead
+    '#5b4a76',
+    '#8c5c80',
+    '#c2717a',   // the pink belt
+    '#e2906b',
+    '#f0b070',
+    '#f7cf8e'    // gold, at the horizon
+  ],
+  SUN_COL: 0xfff1c4,
+  SUN_RING: 0xf7b25e,
+  SUN_Y: 12,                     // clear of the rooftops down the avenue
+  SUN_Z: -300,
+  SUN_R: 22,
+  SKYLINE_TOP: 6,                // ridge line, just under the sun's centre
+  SKYLINE_COLS: [0x5e5570, 0x86708a, 0xb08b87],  // near to far, hazing out
+  FOG_NEAR: 60,
+  FOG_FAR: 190,
+  FOG_COL: 0xe8a878,             // the street dissolves into the sunrise
 
   // ---- Ink / comic palette (pulled from the character reference) ----------
   COL: {
@@ -216,6 +261,6 @@ PP.CFG = {
     rigDeck:  0x5a616b,
 
     // City facades, muted so the cream sky and the character stay dominant
-    bldg: [0xbfb6a6, 0xa89d8b, 0xc9c0ae, 0x938a7a, 0xd2c9b6, 0x8a8072]
+    bldg: [0xb3a695, 0x9b8f80, 0xc4b5a0, 0x877c70, 0xcabba4, 0x7f7468]
   }
 };

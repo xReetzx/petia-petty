@@ -4,12 +4,18 @@
 # vendor/, no build step and nothing fetched at runtime — so this uploads the
 # tree as-is.
 #
-# `enablement: true` asks GitHub to switch Pages on from inside the run, which
-# is the only way to turn it on without a human in Settings. If the repository's
-# Actions permissions refuse that, this step fails with a clear message and
-# somebody has to flip it once by hand: Settings -> Pages -> Build and
-# deployment -> Source: GitHub Actions. After that this workflow keeps the site
-# up to date on its own.
+# `enablement: true` asks GitHub to switch Pages on from inside the run. On this
+# repository that is REFUSED — the run fails with "Create Pages site failed:
+# Resource not accessible by integration", because the automatic GITHUB_TOKEN
+# cannot create a Pages site. The first enablement has to be done by a person,
+# once:
+#
+#     Settings -> Pages -> Build and deployment -> Source: GitHub Actions
+#
+# Pick "GitHub Actions", NOT "Deploy from a branch" — a branch deploy would
+# serve the site without this workflow and leave it failing on every push.
+# Once the source is set, this keeps the site current by itself and the
+# enablement flag below becomes a no-op.
 name: Pages
 
 on:

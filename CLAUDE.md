@@ -115,6 +115,66 @@ zero foot-skate — see the note in `config.js`. His legs are far too short for
 the speed the track moves at; matching it exactly would need eight to twenty
 steps a second.
 
+### The world is merged, pooled per type, and on a budget
+
+Three things hold the city up. Break any one and the frame rate goes.
+
+**Everything merges.** `PP.U.merge()` concatenates transformed geometries into
+one vertex-coloured `BufferGeometry`, so a whole building — tiers, cornices,
+windows, water tower, fire escape, storefront — is **2 draw calls** rather than
+the 24–78 it was as loose inked meshes. `partList()` is the declarative front
+end; `cachedGeo`/`cachedMat` stop a thousand wheels allocating a thousand
+cylinders. Colour rides in a vertex attribute because merged parts share one
+material.
+
+**Outlines are optional and cost double.** `inked(geo, colour, 0)` declines the
+inverted hull. Use it for anything small or far — pedestrians, hydrants, news
+boxes. With 150-odd walkers alive their hulls alone were costing more draw
+calls than the entire skyline.
+
+**One pool per prop type.** All scenery used to share a single pool whose type
+roll happened *inside the factory*, so once it warmed up the mix froze and the
+same few silhouettes recycled for the whole run. Buildings now pick a fresh
+pre-merged variant at placement, and each type has its own free list keyed by
+`userData.sceneryType`.
+
+Run `npm run budget` before and after anything that adds objects. `npm test`
+holds a ceiling, because a frame rate that quietly halves is exactly the kind of
+regression this project ships green.
+
+Two placement rules that are not obvious:
+
+- **Buildings are seated by their street-facing FACE, not their centre.** They
+  are 5.5–11.5 wide; centring a wide one on the building line drove its inner
+  face three units into the road and buried the pavement, the furniture and the
+  crowd standing on it. The half-width rides on `geometry.userData.halfW`.
+- **Nothing painted on the head wrap may have a straight vertical edge**, and
+  nothing in the world may rely on a fixed wall-clock sleep in tests — game
+  time runs well behind wall time on a busy scene, because dt is clamped.
+
+### Obstacles are a band plus an archetype
+
+Collision is only ever `yMin`/`yMax`/`halfW`, so a new kind can look like
+anything — and can just as easily be shaped so that neither jumping nor sliding
+clears it, which is an unavoidable hit. Every kind therefore declares an
+**archetype** in `World.ARCHETYPE`:
+
+| Archetype | Means | Kinds |
+|---|---|---|
+| `jump` | `yMax` under the jump apex | car, cab, cones, plate |
+| `slide` | `yMin` above the slide height, `yMax` above standing | rig, gantry |
+| `block` | too tall to jump, too low to slide | van, truck, dumpster |
+
+`npm test` checks every kind's band against the real apex and slide height. A
+new kind needs three things: a pool keyed by its `kind`, a band, and an
+archetype entry.
+
+**Patterns declare the tier they unlock at.** Full-width jams used to carry an
+`|| p.blocked === 3` escape that skipped the difficulty gate entirely, so about
+a fifth of everything in the first hundred metres was a wall across the road.
+Full-width patterns must also stay **homogeneous** — a row mixing a jump-kind
+and a slide-kind has no single answer.
+
 ### Hair is the health bar
 
 `PP.Player.setHair(n)` swaps geometry for stage `n`: full mop → clipped back to

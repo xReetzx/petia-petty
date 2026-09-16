@@ -7,7 +7,8 @@
   "scripts": {
     "serve": "node tools/serve.js 8777",
     "test": "node tools/test.js",
-    "capture": "node tools/capture.js"
+    "capture": "node tools/capture.js",
+    "budget": "node tools/budget.js"
   },
   "devDependencies": {
     "playwright": "^1.49.1"

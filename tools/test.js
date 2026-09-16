@@ -128,11 +128,20 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   // He should glance over his shoulder at the clippers and come back round.
   {
     let minYaw = 0, maxYaw = -9;
-    for (let i = 0; i < 30; i++) {
-      const y = await page.evaluate(() => window.__PP_DEBUG.headYaw());
-      minYaw = Math.min(minYaw, y); maxYaw = Math.max(maxYaw, y);
-      await sleep(350);
-    }
+    /* Sampled per animation frame inside the page, not on a wall-clock sleep.
+     * The glance cycle runs on GAME time, and with dt clamped to 1/30 a busy
+     * scene on a software renderer advances game time well behind the wall —
+     * so fixed sleeps walk off the end of the cycle and miss the forward
+     * phase. Sampling frames tracks the cycle no matter how slowly it runs. */
+    const yaws = await page.evaluate(async () => {
+      const out = [];
+      for (let i = 0; i < 420; i++) {
+        out.push(window.__PP_DEBUG.headYaw());
+        await new Promise(r => requestAnimationFrame(r));
+      }
+      return out;
+    });
+    minYaw = Math.min(...yaws); maxYaw = Math.max(...yaws);
     ok(minYaw < -1.5, 'glances back over his shoulder (min yaw ' + minYaw.toFixed(2) + ')');
     ok(maxYaw > -0.3, 'and returns to facing forward (max yaw ' + maxYaw.toFixed(2) + ')');
     ok(minYaw < 0, 'turns toward the side the clippers hunt from');
@@ -168,12 +177,16 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   ok(afterShieldHit.shield === 0, 'shield is consumed');
 
   console.log('\n=== SNIP COSTS EXACTLY ONE HAIR STAGE ===');
+  // No shield, or a snip is absorbed instead of costing hair. The street is
+  // dense enough now that a pomade can be collected mid-run by accident.
+  await page.evaluate('window.__PP_DEBUG.clearShield()');
   await page.evaluate('window.__PP_DEBUG.forceSnip()');
   await sleep(120);
   const snip1 = await page.evaluate('window.__PP_DEBUG.stats()');
   ok(snip1.hair === 2, 'first snip: 3 -> 2 (got ' + snip1.hair + ')');
   await page.screenshot({ path: `${SHOTS}/03-snipped.png` });
 
+  await page.evaluate('window.__PP_DEBUG.clearShield()');
   await page.evaluate('window.__PP_DEBUG.forceSnip()');
   await sleep(120);
   const snip2 = await page.evaluate('window.__PP_DEBUG.stats()');
@@ -185,6 +198,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   ok(healed.hair === 2, 'serum restores one stage (got ' + healed.hair + ')');
 
   console.log('\n=== BALD = GAME OVER ===');
+  await page.evaluate('window.__PP_DEBUG.clearShield()');
   await page.evaluate('window.__PP_DEBUG.forceSnip()');
   await sleep(100);
   await page.evaluate('window.__PP_DEBUG.forceSnip()');
@@ -268,9 +282,11 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const laneAfter = await mp.evaluate(() => window.__PP_DEBUG.lane());
   ok(laneAfter < laneBefore, 'swipe left changes lane (' + laneBefore + ' -> ' + laneAfter + ')');
 
-  await sleep(800);
+  // Wait for distance rather than for a duration, for the same reason
+  const advanced = await mp.waitForFunction('window.__PP_DEBUG.stats().metres > 12',
+    { timeout: 15000 }).then(() => true).catch(() => false);
   const mRun = await mp.evaluate('window.__PP_DEBUG.stats()');
-  ok(mRun.metres > 5, 'mobile run advances (' + mRun.metres + 'm)');
+  ok(advanced, 'mobile run advances (' + mRun.metres + 'm)');
   await sleep(2500);
   await mp.screenshot({ path: `${SHOTS}/06-mobile-run.png` });
 
@@ -403,6 +419,65 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   });
   ok(Math.max(...landTrace) > 0.05,
     'landing registers an impact to absorb (' + Math.max(...landTrace).toFixed(3) + 's)');
+
+
+  console.log('\n=== OBSTACLES ARE SURVIVABLE ===');
+  /* The single most valuable check in this file.
+   *
+   * Collision is only a band — yMin/yMax/halfW — so a new obstacle kind is
+   * free to be shaped however it likes, and equally free to be shaped so that
+   * neither jumping nor sliding clears it. That is an unavoidable hit, and
+   * before this nothing validated it anywhere.
+   */
+  const kinds = await page.evaluate('window.__PP_DEBUG.obstacleKinds()');
+  const CFG = await page.evaluate('({ g: PP.CFG.GRAVITY, v: PP.CFG.JUMP_V, slide: PP.CFG.PLAYER_SLIDE_H, stand: PP.CFG.PLAYER_STAND_H })');
+  const apex = (CFG.v * CFG.v) / (2 * Math.abs(CFG.g));
+  ok(Object.keys(kinds).length >= 9,
+    'every obstacle kind is registered (' + Object.keys(kinds).length + ')');
+
+  const unfair = [];
+  for (const [kind, k] of Object.entries(kinds)) {
+    if (k.archetype === 'jump') {
+      // Feet must clear the top of it
+      if (!(apex > k.yMax + 0.05)) unfair.push(kind + ': jump apex ' + apex.toFixed(2) + ' <= yMax ' + k.yMax);
+    } else if (k.archetype === 'slide') {
+      // Sliding head must pass under it
+      if (!(CFG.slide < k.yMin - 0.05)) unfair.push(kind + ': slide height ' + CFG.slide + ' >= yMin ' + k.yMin);
+      if (!(k.yMax > CFG.stand)) unfair.push(kind + ': ' + kind + ' can be run under standing');
+    } else {
+      // A blocker must actually block: too tall to jump, too low to slide under
+      if (!(k.yMax > apex)) unfair.push(kind + ': blocker yMax ' + k.yMax + ' is jumpable (apex ' + apex.toFixed(2) + ')');
+      if (!(k.yMin < CFG.slide)) unfair.push(kind + ': blocker can be slid under');
+    }
+  }
+  ok(unfair.length === 0, 'every kind matches its archetype' +
+    (unfair.length ? ': ' + unfair.join(' | ') : ' (apex ' + apex.toFixed(2) + ')'));
+
+  console.log('\n=== SPACING AND BUDGET ===');
+  await page.evaluate('window.__PP_DEBUG.start()');
+  await sleep(600);
+  /* Spacing has to hold ACROSS chunk seams, not just within a chunk. `z`
+   * restarts at every boundary, so without carrying the last pattern over,
+   * two patterns could land on top of each other at the join. */
+  await sleep(2500);
+  const zs = await page.evaluate('window.__PP_DEBUG.obstacleZs()');
+  const sorted = zs.slice().sort((a, b) => b - a);
+  let minSep = Infinity;
+  for (let i = 1; i < sorted.length; i++) {
+    const d = sorted[i - 1] - sorted[i];
+    if (d > 0.6) minSep = Math.min(minSep, d);   // same-pattern rows share a z
+  }
+  ok(sorted.length < 2 || minSep > 6,
+    'patterns stay apart, seams included (closest ' +
+    (minSep === Infinity ? 'n/a' : minSep.toFixed(1)) + 'u)');
+
+  const budget = await page.evaluate('window.__PP_DEBUG.render()');
+  /* A ceiling, not a target. The city got roughly nine times busier in this
+   * pass and draw calls went DOWN, because everything merges; if a later
+   * change quietly unpicks that, the frame rate goes with it and no other
+   * check in this file would notice. */
+  ok(budget.calls < 1100,
+    'draw calls stay under budget (' + budget.calls + ' for ' + budget.meshes + ' meshes)');
 
   console.log('\n=== FILE:// (no server) ===');
   /* The artwork is baked in as data URIs specifically so the game keeps

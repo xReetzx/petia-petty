@@ -98,11 +98,141 @@ PP.U = (function () {
     return o;
   }
 
-  // Build a mesh with its outline already attached.
+  /* Build a mesh with its outline already attached.
+   *
+   * `thickness: 0` declines the hull. An outline doubles an object's draw
+   * calls, and on anything small or far down the street it is not resolvable
+   * anyway — so the crowd work opts out for most scenery detail.
+   *
+   * Materials come from the cache, so a hundred identically-coloured parts
+   * share one rather than allocating a hundred.
+   */
   function inked(geometry, color, thickness) {
-    const mesh = new THREE.Mesh(geometry, toonMat(color));
-    outline(mesh, thickness);
+    const mesh = new THREE.Mesh(geometry, cachedMat(color));
+    if (thickness !== 0) outline(mesh, thickness);
     return mesh;
+  }
+
+
+  /* ---- Budget: sharing, merging, and optional outlines --------------------
+   *
+   * Every prop in this game used to be built from individual inked meshes,
+   * each allocating its own geometry AND its own material, each carrying an
+   * inverted-hull outline child. That is two draw calls per part, and a
+   * building is thirty-odd parts. The scene was running 1,200-1,700 meshes
+   * before any of the crowd work below, which is the whole reason the city
+   * was kept sparse.
+   *
+   * These three helpers are what make a denser street affordable.
+   */
+
+  // Memoised geometry. Two thousand wheels share one cylinder.
+  const _geoCache = {};
+  function cachedGeo(key, make) {
+    return _geoCache[key] || (_geoCache[key] = make());
+  }
+
+  // Memoised toon material, keyed by colour and the handful of options that
+  // actually vary. Anything with a map stays unshared — maps are per-object.
+  const _matCache = {};
+  function cachedMat(color, opts) {
+    if (opts && (opts.map || opts.transparent || opts.emissive != null)) {
+      return toonMat(color, opts);
+    }
+    const k = 'c' + color;
+    return _matCache[k] || (_matCache[k] = toonMat(color));
+  }
+
+  /* Merge a pile of transformed boxes into ONE geometry with vertex colours.
+   *
+   * r128 ships BufferGeometryUtils only as an examples file and this project
+   * vendors just the core build, so this is the minimum that does the job:
+   * non-indexed position/normal/uv/color concatenation. Feed it
+   * `{ geo, matrix, color, uv }` parts and it returns a single BufferGeometry
+   * that one material can draw in one call.
+   *
+   * Everything merged shares one material, which is why colour rides in a
+   * vertex attribute rather than in the material.
+   */
+  function merge(parts) {
+    let total = 0;
+    const prepped = [];
+    for (const p of parts) {
+      let g = p.geo.index ? p.geo.toNonIndexed() : p.geo.clone();
+      g.applyMatrix4(p.matrix);
+      prepped.push({ g, color: new THREE.Color(p.color == null ? 0xffffff : p.color), uv: p.uv });
+      total += g.attributes.position.count;
+    }
+
+    const pos = new Float32Array(total * 3);
+    const nor = new Float32Array(total * 3);
+    const uvs = new Float32Array(total * 2);
+    const col = new Float32Array(total * 3);
+
+    let v = 0;
+    for (const { g, color, uv } of prepped) {
+      const gp = g.attributes.position, gn = g.attributes.normal, gu = g.attributes.uv;
+      const n = gp.count;
+      pos.set(gp.array.subarray(0, n * 3), v * 3);
+      if (gn) nor.set(gn.array.subarray(0, n * 3), v * 3);
+      for (let i = 0; i < n; i++) {
+        col[(v + i) * 3] = color.r;
+        col[(v + i) * 3 + 1] = color.g;
+        col[(v + i) * 3 + 2] = color.b;
+        /* UV: either pass the source UVs through, or pin every vertex to one
+         * point of the atlas. Pinning is how an untextured part (a water tank,
+         * a fire escape) shares a material with a window-textured wall — it
+         * samples a single blank pixel and takes its colour from the vertex
+         * attribute instead. */
+        if (uv) {
+          uvs[(v + i) * 2] = uv[0];
+          uvs[(v + i) * 2 + 1] = uv[1];
+        } else if (gu) {
+          uvs[(v + i) * 2] = gu.array[i * 2];
+          uvs[(v + i) * 2 + 1] = gu.array[i * 2 + 1];
+        }
+      }
+      v += n;
+      g.dispose();
+    }
+
+    const out = new THREE.BufferGeometry();
+    out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    out.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    out.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    out.computeBoundingSphere();
+    return out;
+  }
+
+  /* A reusable part list, so builders can describe a prop declaratively and
+   * hand the whole thing to merge() once. `box(w,h,d).at(x,y,z)` style would be
+   * nicer but this keeps it to plain data.
+   */
+  function partList() {
+    const parts = [];
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const e = new THREE.Euler();
+    const s = new THREE.Vector3();
+    const p = new THREE.Vector3();
+    return {
+      parts,
+      add(geo, color, pos, rot, scale, uv) {
+        p.set(pos[0], pos[1], pos[2]);
+        e.set(rot ? rot[0] : 0, rot ? rot[1] : 0, rot ? rot[2] : 0);
+        q.setFromEuler(e);
+        s.set(scale ? scale[0] : 1, scale ? scale[1] : 1, scale ? scale[2] : 1);
+        parts.push({ geo, color, uv, matrix: new THREE.Matrix4().compose(p, q, s) });
+        return this;
+      },
+      build(material, outlineThickness) {
+        const geo = merge(parts);
+        const mesh = new THREE.Mesh(geo, material);
+        if (outlineThickness) outline(mesh, outlineThickness);
+        return mesh;
+      }
+    };
   }
 
   // ---- Canvas ink helpers (for drawn textures) ----------------------------
@@ -174,6 +304,7 @@ PP.U = (function () {
     clamp, lerp, damp, easeOutCubic, easeInOutQuad,
     rng, pick, weighted,
     toonGradient, toonMat, outline, inked,
+    cachedGeo, cachedMat, merge, partList,
     inkLine, hatch,
     Pool, store
   };

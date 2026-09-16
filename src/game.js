@@ -32,9 +32,11 @@ window.PP = window.PP || {};
     container = document.getElementById('game');
 
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(PP.CFG.COL.paper);
-    // Fog fades the track into the paper so there's no hard horizon line
-    scene.fog = new THREE.Fog(PP.CFG.COL.paper, 45, 115);
+    /* Dawn. The sky itself is geometry in `world._buildBackdrop()`; this is
+     * the colour behind it and the haze the street dissolves into.
+     */
+    // `world` sets scene.background to the banded dawn sky once it is built.
+    scene.fog = new THREE.Fog(PP.CFG.FOG_COL, PP.CFG.FOG_NEAR, PP.CFG.FOG_FAR);
 
     camera = new THREE.PerspectiveCamera(PP.CFG.FOV_BASE, 1, 0.1, 400);
     camera.position.set(0, PP.CFG.CAM_HEIGHT, PP.CFG.CAM_BACK);
@@ -44,14 +46,21 @@ window.PP = window.PP || {};
     renderer.setSize(window.innerWidth, window.innerHeight);
     container.appendChild(renderer.domElement);
 
-    // Flat, bright lighting — cel shading does the shaping, not the lights.
-    scene.add(new THREE.HemisphereLight(0xfffaf0, 0xa89c85, 0.62));
-    const key = new THREE.DirectionalLight(0xffffff, 0.62);
-    key.position.set(4, 9, 6);
-    scene.add(key);
-    const rim = new THREE.DirectionalLight(0xffe9c0, 0.28);
-    rim.position.set(-5, 4, -8);
-    scene.add(rim);
+    /* Lit by the sunrise he is running at.
+     *
+     * The key used to sit at (4, 9, 6) — behind the camera — so it lit the
+     * backs of everything he runs toward and the city read flat. Now the warm
+     * key comes from low and down-track, where the sun is, and a cool fill
+     * sits behind. That single swap does most of the work of making this look
+     * like dawn; the sky is dressing on top of it.
+     */
+    scene.add(new THREE.HemisphereLight(0xbfc4e8, 0xc99a70, 0.55));
+    const sun = new THREE.DirectionalLight(0xffd9a0, 0.85);
+    sun.position.set(0.5, 3.5, -14);
+    scene.add(sun);
+    const fill = new THREE.DirectionalLight(0x9fb0d8, 0.30);
+    fill.position.set(-5, 7, 9);
+    scene.add(fill);
 
     player = new PP.Player(scene);
     clippers = new PP.Clippers(scene);
@@ -526,6 +535,13 @@ window.PP = window.PP || {};
     }),
     start: startRun,
     forceSnip: () => { player.invuln = 0; onSnipped(); },
+    /* Drop any shield. The street is busy enough now that a run can pick up a
+     * pomade mid-test, and a shield makes `takeSnip` return 'shielded' and
+     * leave the hair alone — which reads as a hair bug and is not one. Tests
+     * that care about hair call this first; the shield test deliberately does
+     * not.
+     */
+    clearShield: () => { player.shield = 0; player.aura.visible = false; },
     forceHit: () => { player.invuln = 0; onObstacleHit(); },
     giveShield: () => player.giveShield(),
     givePickup: (k) => onPickup(k),
@@ -538,7 +554,10 @@ window.PP = window.PP || {};
       G.runTime = (1 - Math.cbrt(1 - y)) * cfg.SPEED_RAMP_TIME;
       G.speed = v;
     },
-    kill: () => { player.invuln = 0; player.setHair(1); onSnipped(); },
+    kill: () => {
+      player.invuln = 0; player.shield = 0; player.aura.visible = false;
+      player.setHair(1); onSnipped();
+    },
     lane: () => player.targetLane,
     playerY: () => +player.y.toFixed(3),
     sliding: () => player.sliding,
@@ -585,6 +604,46 @@ window.PP = window.PP || {};
       materials: Array.isArray(player.skull.material) ? player.skull.material.length : 1,
       geometry: player.skull.geometry.type
     }),
+    /* Render budget.
+     *
+     * Every object in this game costs two draw calls — the toon pass and its
+     * inverted-hull outline — and nothing was instanced or merged, so the
+     * scene was already carrying well over a thousand meshes before the city
+     * got busier. This is measured rather than estimated, and the suite holds
+     * a ceiling on it, because a frame rate that quietly halves is exactly the
+     * kind of regression that ships green here.
+     */
+    render: () => ({
+      calls: renderer.info.render.calls,
+      triangles: renderer.info.render.triangles,
+      meshes: (() => { let n = 0; scene.traverse((o) => { if (o.isMesh) n++; }); return n; })(),
+      geometries: renderer.info.memory.geometries,
+      textures: renderer.info.memory.textures
+    }),
+    /* Every obstacle kind's collision band, next to the archetype it claims.
+     *
+     * The suite checks these against the jump apex and the slide height. A
+     * kind whose band does not match its archetype — a "jump" obstacle taller
+     * than he can jump — is an unavoidable hit, and nothing in this project
+     * validated that in code or in tests until now. With nine kinds instead of
+     * three, that is no longer a risk worth carrying.
+     */
+    obstacleKinds: () => {
+      const out = {};
+      const W = PP.World;
+      Object.keys(W.OB).forEach((k) => {
+        const kind = W.OB[k];
+        const m = world.obPools[kind].get();
+        out[kind] = {
+          archetype: W.ARCHETYPE[kind],
+          yMin: m.userData.yMin, yMax: m.userData.yMax, halfW: m.userData.halfW
+        };
+        world.obPools[kind].put(m);
+      });
+      return out;
+    },
+    // Z of every live obstacle, for checking spacing holds across chunk seams
+    obstacleZs: () => world.obstacles.map((o) => +o.position.z.toFixed(2)),
     // World-space Y of each foot, for checking ground contact
     feetY: () => player.legs.map((l) => {
       const v = new THREE.Vector3();
